@@ -1,0 +1,9 @@
+flow_cell_id,kit,sample_id,experiment_id,barcode,type
+FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode01,test_sample
+FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode02,test_sample
+FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode03,test_sample
+FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode04,test_sample
+FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode05,test_sample
+FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode06,test_sample
+FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode07,test_sample
+FA026858,SQK-RBK004,barcoding_run,sequencing_20200522,barcode08,test_sample
