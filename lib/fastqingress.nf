@@ -167,7 +167,7 @@ def watch_path(Map margs) {
 
 
 process mv_or_pigz {
-    label "wftemplate"
+    label "wfamplicon"
     cpus params.threads
     input:
         tuple val(meta), path(input)
@@ -190,7 +190,7 @@ process mv_or_pigz {
 
 
 process fastcat {
-    label "wftemplate"
+    label "wfamplicon"
     cpus params.threads
     input:
         tuple val(meta), path(input)
@@ -408,7 +408,7 @@ def get_sample_sheet(Path sample_sheet) {
  * @return: string (optional)
  */
 process validate_sample_sheet {
-    label "wftemplate"
+    label "wfamplicon"
     input: path csv
     output: stdout
     """
