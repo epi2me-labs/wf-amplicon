@@ -8,14 +8,14 @@
 ## Introduction
 
 This [Nextflow](https://www.nextflow.io/) workflow provides a simple way to
-analyse Oxford Nanopore reads generated from amplicons.<br>
+analyse Oxford Nanopore reads generated from amplicons.
 
 It requires the raw reads and a reference FASTA file containing one sequence per
 amplicon. After filtering (based on read length and quality) and trimming,
 reads are aligned to the reference using
 [minimap2](https://github.com/lh3/minimap2). Variants are then called with
 [Medaka](https://github.com/nanoporetech/medaka). Results include an interactive
-HTML report and VCF files containing the called variants.<br>
+HTML report and VCF files containing the called variants.
 
 As mentioned above, the reference FASTA file needs to contain one sequence per
 amplicon for now. An option to provide a whole-genome reference file and pairs
@@ -79,8 +79,7 @@ downsampled. You can control the number of reads to keep per sample with
 Haploid variants are then called with
 [Medaka](https://github.com/nanoporetech/medaka). You can set the minimum
 coverage a variant needs to exceed in order to be included in the results with
-`--min_coverage`.<br>
-The workflow selects the appropriate
+`--min_coverage`. The workflow selects the appropriate
 [Medaka](https://github.com/nanoporetech/medaka) model based on the basecaller
 configuration that was used to process the signal data. You can use the
 parameter `--basecaller_cfg` to provide this information (e.g.
