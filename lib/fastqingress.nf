@@ -40,14 +40,22 @@ def fastq_ingress(Map arguments)
         // with fastq)
         ch_input = get_valid_inputs(margs)
     }
+    // `ch_input` might contain elements of `[metamap, null]` if there were entries in
+    // the sample sheet for which no FASTQ files were found. We put these into an extra
+    // channel and combine with the result channel before returning.
+    ch_input = ch_input.branch { meta, path ->
+        reads_found: path as boolean
+        no_reads_found: true
+    }
+    def ch_result
     if (margs.fastcat_stats) {
         // run fastcat regardless of input type
-        return fastcat(ch_input, margs["fastcat_extra_args"])
+        ch_result = fastcat(ch_input.reads_found, margs["fastcat_extra_args"])
     } else {
         // the fastcat stats were not requested --> run fastcat only on directories with
         // more than one FASTQ file (and not on single files or directories with a
         // single file)
-        ch_branched = ch_input.map {meta, path ->
+        def ch_branched = ch_input.reads_found.map {meta, path ->
             // find directories with only a single FASTQ file and "unwrap" the file
             if (path.isDirectory()) {
                 List fq_files = get_fq_files_in_dir(path)
@@ -58,20 +66,21 @@ def fastq_ingress(Map arguments)
             [meta, path]
         } .branch { meta, path ->
             // now there can only be two cases:
-            // (i) single FASTQ file (pass to `mv_or_pigz` later)
+            // (i) single FASTQ file (pass to `move_or_compress` later)
             // (ii) dir with multiple fastq files (pass to `fastcat` later)
             single_file: path.isFile()
             dir_with_fastq_files: true
         }
         // call the respective processes on both branches and return
-        return fastcat(
+        ch_result = fastcat(
             ch_branched.dir_with_fastq_files, margs["fastcat_extra_args"]
         ).concat(
-            ch_branched.single_file | mv_or_pigz | map {
+            ch_branched.single_file | move_or_compress | map {
                 meta, path -> [meta, path, null]
             }
         )
     }
+    return ch_result.concat(ch_input.no_reads_found.map { [*it, null] })
 }
 
 
@@ -97,8 +106,14 @@ def watch_path(Map margs) {
     if (input.isFile()) {
         error "Input ($input) must be a directory when using `watch_path`."
     }
-    // create channel with `watchPath`
-    ch_watched = Channel.watchPath("$input/**").until { it.name.startsWith('STOP') }
+    // get existing FASTQ files first (look for relevant files in the top-level dir and
+    // all sub-dirs)
+    def ch_existing_input = Channel.fromPath(input)
+    | concat(Channel.fromPath("$input/*", type: 'dir'))
+    | map { get_fq_files_in_dir(it) }
+    | flatten
+    // now get channel with files found by `watchPath`
+    def ch_watched = Channel.watchPath("$input/**").until { it.name.startsWith('STOP') }
     // only keep FASTQ files
     | filter {
         for (ext in EXTENSIONS) {
@@ -106,36 +121,41 @@ def watch_path(Map margs) {
         }
         return false
     }
-    // throw error when finding files in top-level dir and sub-directories
-    | combine(Channel.of([:]))
+    // merge the channels
+    ch_watched = ch_existing_input | concat(ch_watched)
+    // check if input is as expected; start by throwing an error when finding files in
+    // top-level dir and sub-directories
+    String prev_input_type
+    ch_watched
     | map {
-        String old_state = it[1]["state"]
-        String new_state = (it[0].parent == input) ? "top-level" : "subdir"
-        if (old_state && (old_state != new_state)) {
-            error "`watchPath` found files in the top-level directory " +
+        String input_type = (it.parent == input) ? "top-level" : "sub-dir"
+        if (prev_input_type && (input_type != prev_input_type)) {
+            error "`watchPath` found FASTQ files in the top-level directory " +
                 "as well as in sub-directories."
         }
-        // we also don't want files in the top-level dir when we got a sample sheet
-        if ((new_state == "top-level") && margs["sample_sheet"]) {
-            error "`watchPath` found files in top-level directory even though there " +
-                "is a sample sheet."
+        // if file is in a sub-dir, make sure it's not a sub-sub-dir
+        if ((input_type == "sub-dir") && (it.parent.parent != input)) {
+            error "`watchPath` found a FASTQ file more than one level of " +
+                "sub-directories deep ('$it')."
         }
-        it[1]["state"] = new_state
-        [it[0], it[1]]
+        // we also don't want files in the top-level dir when we got a sample sheet
+        if ((input_type == "top-level") && margs["sample_sheet"]) {
+            error "`watchPath` found files in top-level directory even though a " +
+                "sample sheet was provided ('${margs["sample_sheet"]}')."
+        }
+        prev_input_type = input_type
     }
-    | map { it[0] }
-
     if (margs.sample_sheet) {
         // add metadata from sample sheet (we can't use join here since it does not work
         // with repeated keys; we therefore need to transform the sample sheet data into
         // a map with the barcodes as keys)
-        def ch_sample_sheet = get_sample_sheet(file(margs.sample_sheet))
+        def ch_sample_sheet = get_sample_sheet(file(margs.sample_sheet), margs.required_sample_types)
         | collect
         | map { it.collectEntries { [(it["barcode"]): it] } }
         // now we can use this channel to annotate all files with the corresponding info
         // from the sample sheet
         ch_watched = ch_watched
-        | combine ( ch_sample_sheet )
+        | combine(ch_sample_sheet)
         | map { file_path, sample_sheet_map ->
             String barcode = file_path.parent.name
             Map meta = sample_sheet_map[barcode]
@@ -166,8 +186,8 @@ def watch_path(Map margs) {
 }
 
 
-process mv_or_pigz {
-    label "wfamplicon"
+process move_or_compress {
+    label params.process_label
     cpus params.threads
     input:
         tuple val(meta), path(input)
@@ -183,14 +203,14 @@ process mv_or_pigz {
             """
         } else {
             """
-            cat $input | pigz -p $task.cpus > $out
+            cat $input | bgzip -@ $task.cpus > $out
             """
         }
 }
 
 
 process fastcat {
-    label "wfamplicon"
+    label params.process_label
     cpus params.threads
     input:
         tuple val(meta), path(input)
@@ -203,12 +223,12 @@ process fastcat {
         """
         mkdir $fastcat_stats_outdir
         fastcat \
-            -s $meta.alias \
+            -s ${meta["alias"]} \
             -r $fastcat_stats_outdir/per-read-stats.tsv \
             -f $fastcat_stats_outdir/per-file-stats.tsv \
             $extra_args \
             $input \
-            | pigz -p $task.cpus > $out
+            | bgzip -@ $task.cpus > $out
         """
 }
 
@@ -227,6 +247,7 @@ Map parse_arguments(Map arguments) {
                 "analyse_unclassified": false,
                 "fastcat_stats": false,
                 "fastcat_extra_args": "",
+                "required_sample_types": [],
                 "watch_path": false],
         name: "fastq_ingress")
     return parser.parse_args(arguments)
@@ -248,10 +269,9 @@ def get_valid_inputs(Map margs){
     } catch (NoSuchFileException e) {
         error "Input path $margs.input does not exist."
     }
-    boolean dir_has_subdirs = false
-    boolean dir_has_fastq_files = false
-    // declare resulting input channel
+    // declare resulting input channel and other variables needed in the outer scope
     def ch_input
+    ArrayList sub_dirs_with_fastq_files
     // handle case of `input` being a single file
     if (input.isFile()) {
         // the `fastcat` process can deal with directories or single file inputs
@@ -261,24 +281,26 @@ def get_valid_inputs(Map margs){
         // input is a directory --> we accept two cases: (i) a top-level directory with
         // fastq files and no sub-directories or (ii) a directory with one layer of
         // sub-directories containing fastq files
-        dir_has_fastq_files = get_fq_files_in_dir(input) as boolean
-        // find potential subdirectories (this list can be empty)
+        boolean dir_has_fastq_files = get_fq_files_in_dir(input)
+        // find potential sub-directories (and sub-dirs with FASTQ files; note that
+        // these lists can be empty)
         ArrayList sub_dirs = file(input.resolve('*'), type: "dir")
-        dir_has_subdirs = sub_dirs as boolean
-        // deal with first case (top-lvl dir with fastq files and no sub-directories)
-        if (dir_has_fastq_files){
-            if (dir_has_subdirs) {
+        sub_dirs_with_fastq_files = sub_dirs.findAll { get_fq_files_in_dir(it) }
+        // deal with first case (top-lvl dir with FASTQ files and no sub-directories
+        // containing FASTQ files)
+        if (dir_has_fastq_files) {
+            if (sub_dirs_with_fastq_files) {
                 error "Input directory '$input' cannot contain FASTQ " +
-                "files and sub-directories."
+                    "files and sub-directories with FASTQ files."
             }
             ch_input = Channel.of(
                 [create_metamap([alias: margs["sample"] ?: input.baseName]), input])
         } else {
             // deal with the second case (sub-directories with fastq data) --> first
             // check whether we actually found sub-directories
-            if (!dir_has_subdirs) {
+            if (!sub_dirs_with_fastq_files) {
                 error "Input directory '$input' must contain either FASTQ files " +
-                    "or sub-directories."
+                    "or sub-directories containing FASTQ files."
             }
             // make sure that there are no sub-sub-directories with FASTQ files and that
             // the sub-directories actually contain fastq files)
@@ -289,12 +311,6 @@ def get_valid_inputs(Map margs){
                 error "Input directory '$input' cannot contain more " +
                     "than one level of sub-directories with FASTQ files."
             }
-            ArrayList sub_dirs_with_fastq_files = sub_dirs.findAll {
-                get_fq_files_in_dir(it) as boolean
-            }
-            if (!sub_dirs_with_fastq_files) {
-                error "No FASTQ files were found in the sub-directories of '$input'."
-            }
             // remove directories called 'unclassified' unless otherwise specified
             if (!margs.analyse_unclassified) {
                 sub_dirs_with_fastq_files = sub_dirs_with_fastq_files.findAll {
@@ -304,21 +320,26 @@ def get_valid_inputs(Map margs){
             // filter based on sample sheet in case one was provided
             if (margs.sample_sheet) {
                 // get channel of entries in the sample sheet
-                def ch_sample_sheet = get_sample_sheet(file(margs.sample_sheet))
-                // get the intersection of both channels
-                def ch_intersection = Channel.fromPath(sub_dirs_with_fastq_files).map {
+                def ch_sample_sheet = get_sample_sheet(file(margs.sample_sheet), margs.required_sample_types)
+                // get the union of both channels (missing values will be replaced with
+                // `null`)
+                def ch_union = Channel.fromPath(sub_dirs_with_fastq_files).map {
                     [it.baseName, it]
-                }.join(ch_sample_sheet.map{[it.barcode, it]}, remainder: false)
-                // TODO: we should let the user know if a sample present in the sample
-                // sheet didn't have a matching sub-directory. We could throw an error
-                // or print a warning, but ideally we would return an extra channel from
-                // `fastq_ingress` with a summary about what has been found (in terms of
-                // sample sheet and sub-dirs) --> we'll do this later
-
-                // put metadata into map and return
-                ch_input = ch_intersection.map {barcode, path, sample_sheet_entry -> [
-                    create_metamap(sample_sheet_entry), path
-                ]}
+                }.join(ch_sample_sheet.map{[it.barcode, it]}, remainder: true)
+                // after joining the channels, there are three possible cases:
+                // (i) valid input path and sample sheet entry are both present
+                // (ii) there is a sample sheet entry but no corresponding input dir
+                //      --> we'll emit `[metamap-from-sample-sheet-entry, null]`
+                // (iii) there is a valid path, but the sample sheet entry is missing
+                //      --> drop this entry and print a warning to the log
+                ch_input = ch_union.map {barcode, path, sample_sheet_entry ->
+                    if (sample_sheet_entry) {
+                        [create_metamap(sample_sheet_entry), path]
+                    } else {
+                        log.warn "Input directory '$barcode' was found, but sample " +
+                            "sheet '$margs.sample_sheet' has no such entry."
+                    }
+                }
             } else {
                 ch_input = Channel.fromPath(sub_dirs_with_fastq_files).map {
                     [create_metamap([alias: it.baseName, barcode: it.baseName]), it]
@@ -330,7 +351,7 @@ def get_valid_inputs(Map margs){
     }
     // a sample sheet only makes sense in the case of a directory with
     // sub-directories
-    if (margs.sample_sheet && !dir_has_subdirs) {
+    if (margs.sample_sheet && !sub_dirs_with_fastq_files) {
         error "Sample sheet was provided, but input does not contain " +
             "sub-directories with FASTQ files."
     }
@@ -376,7 +397,7 @@ ArrayList get_fq_files_in_dir(Path dir) {
  * @param sample_sheet: path to the sample sheet CSV
  * @return: channel of maps (with values in sample sheet header as keys)
  */
-def get_sample_sheet(Path sample_sheet) {
+def get_sample_sheet(Path sample_sheet, ArrayList required_sample_types) {
     // If `validate_sample_sheet` does not return an error message, we can assume that
     // the sample sheet is valid and parse it. However, because of Nextflow's
     // asynchronous magic, we might emit values from `.splitCSV()` before the
@@ -385,9 +406,9 @@ def get_sample_sheet(Path sample_sheet) {
     // in STDOUT. Thus, we use the somewhat clunky construct with `concat` and `last`
     // below. This lets the CSV channel only start to emit once the error checking is
     // done.
-    ch_err = validate_sample_sheet(sample_sheet).map {
+    ch_err = validate_sample_sheet(sample_sheet, required_sample_types).map {
         // check if there was an error message
-        if (it) error "Invalid sample sheet: $it"
+        if (it) error "Invalid sample sheet: ${it}."
         it
     }
     // concat the channel holding the path to the sample sheet to `ch_err` and call
@@ -405,13 +426,19 @@ def get_sample_sheet(Path sample_sheet) {
  * message is emitted.
  *
  * @param: path to sample sheet CSV
+ * @param: list of required sample types (optional)
  * @return: string (optional)
  */
 process validate_sample_sheet {
-    label "wfamplicon"
-    input: path csv
+    label params.process_label
+    input: 
+        path csv
+        val required_sample_types
     output: stdout
+    script:
+    String req_types_arg = required_sample_types ? "--required_sample_types "+required_sample_types.join(" ") : ""
     """
-    workflow-glue check_sample_sheet $csv
+    workflow-glue check_sample_sheet $csv $req_types_arg
     """
 }
+

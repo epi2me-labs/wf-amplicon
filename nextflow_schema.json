@@ -1,10 +1,10 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
-    "title": "epi2me-labs/wf-template",
-    "description": "Nextflow workflow template repository.",
-    "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-template/wf-template-demo.tar.gz",
-    "url": "https://github.com/epi2me-labs/wf-template",
+    "title": "epi2me-labs/wf-amplicon",
+    "description": "Nextflow workflow for analysing Oxford Nanopore reads created by amplicon sequencing.",
+    "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-amplicon/wf-amplicon-demo.tar.gz",
+    "url": "https://github.com/epi2me-labs/wf-amplicon",
     "type": "object",
     "definitions": {
         "input": {
@@ -24,6 +24,12 @@
                     "default": false,
                     "description": "Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory.",
                     "help_text": "If selected and if the input is a multiplex directory the workflow will also process the unclassified directory."
+                },
+                "reference": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to a reference FASTA file.",
+                    "help_text": "If provided, the workflow will perform variant calling against the reference. Otherwise, it will cluster reads and create the consensus sequence for each cluster. The reference file should contain one ref. sequence per amplicon."
                 }
             },
             "required": [
@@ -48,6 +54,79 @@
                 }
             }
         },
+        "preprocessing_options": {
+            "title": "Pre-processing Options",
+            "type": "object",
+            "fa_icon": "fas fa-arrow-left",
+            "description": "Parameters for filtering and downsampling reads before running the rest of the workflow.",
+            "properties": {
+                "min_read_length": {
+                    "type": "integer",
+                    "default": 300,
+                    "description": "Minimum read length.",
+                    "help_text": "Shorter reads will be removed."
+                },
+                "max_read_length": {
+                    "type": "integer",
+                    "description": "Maximum read length.",
+                    "help_text": "Longer reads will be removed."
+                },
+                "min_read_qual": {
+                    "type": "number",
+                    "default": 10.0,
+                    "description": "Minimum mean read quality.",
+                    "help_text": "Reads with a lower mean quality will be removed."
+                },
+                "reads_downsampling_size": {
+                    "type": "integer",
+                    "description": "Downsample to this number of reads per sample.",
+                    "help_text": "Downsampling is performed after filtering. Set to 0 to disable downsampling."
+                }
+            }
+        },
+        "variant_calling_options": {
+            "title": "Variant calling options",
+            "type": "object",
+            "fa_icon": "fas fa-arrow-left",
+            "description": "Parameters affecting the variant calling process.",
+            "properties": {
+                "min_coverage": {
+                    "type": "integer",
+                    "description": "Minimum coverage for variants to keep.",
+                    "help_text": "Only variants covered by more than this number of reads are reported in the resulting VCF file.",
+                    "min": 0,
+                    "default": 20
+                },
+                "basecaller_cfg": {
+                    "type": "string",
+                    "default": "dna_r10.4.1_e8.2_400bps_hac",
+                    "description": "Name of the basecaller model that processed the signal data; used to select an appropriate Medaka model.",
+                    "help_text": "The basecaller configuration is used to automatically select the appropriate Medaka model. The automatic selection can be overridden with the 'medaka_model' parameters. Available models are: 'dna_r10.4.1_e8.2_400bps_hac@v3.5.2', 'dna_r10.4.1_e8.2_400bps_sup@v3.5.2', 'dna_r9.4.1_e8_fast@v3.4', 'dna_r9.4.1_e8_hac@v3.3', 'dna_r9.4.1_e8_sup@v3.3', 'dna_r10.4.1_e8.2_400bps_hac_prom', 'dna_r9.4.1_450bps_hac_prom', 'dna_r10.3_450bps_hac', 'dna_r10.3_450bps_hac_prom', 'dna_r10.4.1_e8.2_260bps_hac', 'dna_r10.4.1_e8.2_260bps_hac_prom', 'dna_r10.4.1_e8.2_400bps_hac', 'dna_r9.4.1_450bps_hac', 'dna_r9.4.1_e8.1_hac', 'dna_r9.4.1_e8.1_hac_prom'.",
+                    "enum": [
+                        "dna_r10.4.1_e8.2_400bps_hac@v3.5.2",
+                        "dna_r10.4.1_e8.2_400bps_sup@v3.5.2",
+                        "dna_r9.4.1_e8_fast@v3.4",
+                        "dna_r9.4.1_e8_hac@v3.3",
+                        "dna_r9.4.1_e8_sup@v3.3",
+                        "dna_r10.4.1_e8.2_400bps_hac_prom",
+                        "dna_r9.4.1_450bps_hac_prom",
+                        "dna_r10.3_450bps_hac",
+                        "dna_r10.3_450bps_hac_prom",
+                        "dna_r10.4.1_e8.2_260bps_hac",
+                        "dna_r10.4.1_e8.2_260bps_hac_prom",
+                        "dna_r10.4.1_e8.2_400bps_hac",
+                        "dna_r9.4.1_450bps_hac",
+                        "dna_r9.4.1_e8.1_hac",
+                        "dna_r9.4.1_e8.1_hac_prom"
+                    ]
+                },
+                "medaka_model": {
+                    "type": "string",
+                    "description": "The name of the Medaka model to use. This will override the model automatically chosen based on the provided basecaller configuration.",
+                    "help_text": "The workflow will attempt to map the basecaller model (provided with 'basecaller_cfg') used to a suitable Medaka model. You can override this by providing a model with this option instead."
+                }
+            }
+        },
         "output": {
             "title": "Output Options",
             "type": "object",
@@ -68,7 +147,15 @@
             "fa_icon": "far fa-question-circle",
             "description": "Advanced options for configuring processes inside the workflow.",
             "help_text": "These advanced options do not need to be changed for typical use, but allow fine tuning of workflows for users who want more control over the workflow.",
-            "properties": {}
+            "properties": {
+                "number_depth_windows": {
+                    "type": "integer",
+                    "description": "Number of windows used during depth of coverage calculations.",
+                    "help_text": "Depth of coverage is calculated for each sample across each amplicon split into this number of windows. A higher number will produce more fine-grained results at the expense of run time. Values of 100-200 should be suitable in the vast majority of cases.",
+                    "min": 10,
+                    "default": 100
+                }
+            }
         },
         "misc": {
             "title": "Miscellaneous Options",
@@ -76,6 +163,12 @@
             "description": "Everything else.",
             "default": "",
             "properties": {
+                "threads": {
+                    "type": "integer",
+                    "default": 4,
+                    "description": "Maximum number of CPU threads to use per workflow task.",
+                    "help_text": "Several tasks in this workflow benefit from using multiple CPU threads. This option sets the maximum number of CPU threads for such processes. The total CPU resources used by the workflow are constrained by the executor configuration in `nextflow.config`."
+                },
                 "disable_ping": {
                     "type": "boolean",
                     "default": false,
@@ -104,6 +197,12 @@
             "$ref": "#/definitions/samples"
         },
         {
+            "$ref": "#/definitions/preprocessing_options"
+        },
+        {
+            "$ref": "#/definitions/variant_calling_options"
+        },
+        {
             "$ref": "#/definitions/output"
         },
         {
@@ -116,9 +215,9 @@
     "properties": {
         "process_label": {
             "type": "string",
-            "description": "The main process label for template processes to use by default",
+            "description": "The main process label for processes to use by default",
             "hidden": true,
-            "default": "wf-template"
+            "default": "wfamplicon"
         },
         "aws_image_prefix": {
             "type": "string",
@@ -140,7 +239,7 @@
         }
     },
     "docs": {
-        "intro": "## Introduction\n\nThis section of documentation typically contains an overview of the workflow in terms of motivation\nand bioinformatics methods, listing any key tools or algorithms employed, whilst also describing its\nrange of use-cases and what a suitable input dataset should look like.\n\n",
-        "links": "## Useful links\n\n* [nextflow](https://www.nextflow.io/)\n* [docker](https://www.docker.com/products/docker-desktop)\n* [singularity](https://docs.sylabs.io/guides/latest/user-guide/)\n"
+        "intro": "## Introduction\n\nThis [Nextflow](https://www.nextflow.io/) workflow provides a simple way to\nanalyse Oxford Nanopore reads generated from amplicons.<br>\n\nIt requires the raw reads and a reference FASTA file containing one sequence per\namplicon. After filtering (based on read length and quality) and trimming,\nreads are aligned to the reference using\n[minimap2](https://github.com/lh3/minimap2). Variants are then called with\n[Medaka](https://github.com/nanoporetech/medaka). Results include an interactive\nHTML report and VCF files containing the called variants.<br>\n\nAs mentioned above, the reference FASTA file needs to contain one sequence per\namplicon for now. An option to provide a whole-genome reference file and pairs\nof primers might be added in the future if requested by users.\n",
+        "links": "\n## Useful links\n\n- [Nextflow](https://www.nextflow.io/)\n- [Docker](https://www.docker.com/products/docker-desktop)\n- [Singularity](https://docs.sylabs.io/guides/latest/user-guide/)\n- [minimap2](https://github.com/lh3/minimap2)\n- [Medaka](https://github.com/nanoporetech/medaka)\n- [Porechop](https://github.com/rrwick/Porechop)\n"
     }
 }
