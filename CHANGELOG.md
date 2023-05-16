@@ -6,7 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.1.2]
 ### Added
-- Configuration for running demo data in AWS
+- Configuration for running demo data in AWS.
+- Tags for `epi2melabs` desktop app.
 
 ## [v0.1.1]
 ### Fixed
