@@ -30,11 +30,12 @@
                     "type": "string",
                     "format": "file-path",
                     "description": "Path to a reference FASTA file.",
-                    "help_text": "If provided, the workflow will perform variant calling against the reference. Otherwise, it will cluster reads and create the consensus sequence for each cluster. The reference file should contain one ref. sequence per amplicon."
+                    "help_text": "The reference file should contain one sequence per amplicon."
                 }
             },
             "required": [
-                "fastq"
+                "fastq",
+                "reference"
             ]
         },
         "samples": {

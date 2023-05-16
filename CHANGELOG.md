@@ -14,5 +14,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bug in documentation that prevented blog post from building.
 
 ## [v0.1.0]
-
-First release.
+* First release.
