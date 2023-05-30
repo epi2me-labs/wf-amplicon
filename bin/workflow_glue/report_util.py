@@ -48,7 +48,7 @@ class ReportDataSet:
             columns=["amp", "pos", "ref", "alt", "type", "AB"]
         ).set_index(["amp", "pos"])
         # check that the VCF only contains a single sample
-        vcf_file = pysam.VariantFile(vcf_path := data_dir / "medaka.annotated.vcf")
+        vcf_file = pysam.VariantFile(vcf_path := data_dir / "medaka.annotated.vcf.gz")
         if len(vcf_file.header.samples) != 1:
             raise ValueError(f"Found multiple samples in {vcf_path}.")
         # process variants
