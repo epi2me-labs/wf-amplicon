@@ -207,7 +207,11 @@ workflow pipeline {
             software_versions | map { [it, null] },
             workflow_params | map { [it, null] },
             variantCallingPipeline.out.variants
-            | map { meta, vcf -> [vcf, "$meta.alias/variants"] }
+            | map { meta, vcf -> [vcf, "$meta.alias/variants"] },
+            variantCallingPipeline.out.mapped
+            | map { meta, bam -> [bam, "$meta.alias/alignments"] },
+            variantCallingPipeline.out.consensus
+            | map { meta, cons -> [cons, "$meta.alias/consensus"] },
         )
 
         makeReport(

@@ -117,8 +117,9 @@ process medakaVariant {
         path "reference.fasta"
         val min_coverage
     output:
-        tuple val(meta), path("medaka.annotated.vcf"), emit: filtered
+        tuple val(meta), path("medaka.annotated.vcf.gz"), emit: filtered
         tuple val(meta), path("medaka.annotated.unfiltered.vcf"), emit: unfiltered
+        tuple val(meta), path("medaka.consensus.fasta"), emit: consensus
     """
     medaka variant reference.fasta consensus_probs*.hdf medaka.vcf
     medaka tools annotate --dpsp medaka.vcf reference.fasta input.bam \
@@ -126,8 +127,13 @@ process medakaVariant {
 
     # filter variants
     bcftools filter medaka.annotated.unfiltered.vcf \
-        -e 'ALT = "." | INFO/DP < $min_coverage' \
-        -Ov -o medaka.annotated.vcf
+        -e 'INFO/DP < $min_coverage' \
+        -Oz -o medaka.annotated.vcf.gz
+
+    # make consensus seqs
+    bcftools index medaka.annotated.vcf.gz
+    bcftools consensus -f reference.fasta medaka.annotated.vcf.gz \
+        -o medaka.consensus.fasta
     """
 }
 
@@ -185,7 +191,9 @@ workflow pipeline {
         | groupTuple
         | concatMosdepthResultFiles
     emit:
+        mapped = alignReads.out | map { meta, bam, bai -> [meta, bam] }
         mapping_stats = bamstats.out
         depth = concatMosdepthResultFiles.out
         variants = medakaVariant.out.filtered
+        consensus = medakaVariant.out.consensus
 }
