@@ -4,11 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v0.2.0]
 ### Changed
+- Instead of dropping variants with `DP < min_coverage`, set their `FILTER` column to `LOW_DEPTH` in the results VCF.
 - Bumped minimum required Nextflow version to 22.10.8.
 - Enum choices are enumerated in the `--help` output.
 - Enum choices are enumerated as part of the error message when a user has selected an invalid choice.
+
+### Fixed
+- Replaced `--threads` option in `fastqingress.nf` with hardcoded values to remove warning about undefined `param.threads`.
 
 ## [v0.1.3]
 ### Added
