@@ -128,11 +128,13 @@ process medakaVariant {
     # filter variants
     bcftools filter medaka.annotated.unfiltered.vcf \
         -e 'INFO/DP < $min_coverage' \
+        -s LOW_DEPTH \
         -Oz -o medaka.annotated.vcf.gz
 
     # make consensus seqs
     bcftools index medaka.annotated.vcf.gz
     bcftools consensus -f reference.fasta medaka.annotated.vcf.gz \
+        -i 'FILTER="PASS"' \
         -o medaka.consensus.fasta
     """
 }

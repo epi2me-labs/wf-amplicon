@@ -356,9 +356,10 @@ def main(args):
     # variant tables
     with report.add_section("Variants", "Variants"):
         html_tags.p(
-            """
-            Haploid variant calling was performed with Medaka.
-            """
+            "Haploid variant calling was performed with Medaka. Variants with low ",
+            "depth (i.e. smaller than ",
+            html_tags.kbd("--min_coverage"),
+            ') are shown under the "Low depth" tab.',
         )
         # combine all variants into a single dataframe with `[sample, amplicon]` as
         # multi-level index
@@ -370,12 +371,14 @@ def main(args):
                         for d in datasets
                     )
                 )
+                .astype({"pos": int, "DP": int, "AB": float})
                 .rename(
                     columns={
                         "amp": "amplicon",
                         "pos": "position",
                         "ref": "ref. allele",
                         "alt": "alt. allele",
+                        "DP": "Depth",
                         "AB": "Allelic balance",
                     }
                 )
@@ -384,7 +387,26 @@ def main(args):
             .sort_values(["Sample", "Amplicon", "Position"])
             .set_index(["Sample", "Amplicon"])
         )
-        DataTable.from_pandas(comb_variants.reset_index(), use_index=False)
+        comb_variants["Allelic balance"] = (
+            comb_variants["Allelic balance"].astype(str) + "%"
+        )
+        # one tab + table for the variants that passed the depth filter and one for the
+        # others
+        tabs = Tabs()
+        with tabs.add_tab("Filters passed"):
+            DataTable.from_pandas(
+                comb_variants.query("Filter == 'PASS'")
+                .drop(columns="Filter")
+                .reset_index(),
+                use_index=False,
+            )
+        with tabs.add_tab("Low depth"):
+            DataTable.from_pandas(
+                comb_variants.query("Filter == 'LOW_DEPTH'")
+                .drop(columns="Filter")
+                .reset_index(),
+                use_index=False,
+            )
 
     report.write(args.report_fname)
     logger.info(f"Report written to '{args.report_fname}'.")
