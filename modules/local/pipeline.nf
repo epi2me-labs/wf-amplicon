@@ -37,12 +37,16 @@ process mosdepth {
     script:
     int mosdepth_extra_threads = task.cpus - 1
     """
-    # get window length for reference
+    # get the length of the reference
     ref_length=\$(samtools idxstats input.bam | awk '\$1 == "$ref_id" {print \$2}')
-    window_length=\$(expr \$ref_length / $n_windows)
 
-    # if the reference is very short, `window_length` might be `0` --> set to `1`
-    [ "\$window_length" -eq "0" ] && window_length=1
+    # calculate the corresponding window length (check `ref_length` first because
+    # `expr a / b` returns non-zero exit code when `a < b`)
+    if [ "\$ref_length" -lt "$n_windows" ]; then
+        window_length=1
+    else
+        window_length=\$(expr \$ref_length / $n_windows)
+    fi
 
     # get the depths (we could add `-x`, but it loses a lot of detail from the depth
     # curves)
