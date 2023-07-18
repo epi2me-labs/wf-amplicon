@@ -174,6 +174,21 @@ workflow pipeline {
         // add the post-trim stats to the results channel
         ch_per_sample_results = ch_per_sample_results.join(porechop.out.stats)
 
+        // parse the post-porechop fastcat per-file stats to make sure that there are
+        // reads left after pre-processing and throw error otherwise
+        porechop.out.stats
+        .splitCsv(sep: "\t", header: true)
+        .collect { meta, stats -> stats['n_seqs'] as int }
+        .map {
+            // sum up the `n_seqs`  column and throw an error if the total is `0`
+            def total_reads = it.inject(0) { res, i -> res + (i as int) }
+            if (total_reads == 0) {
+                log.warn "No reads left after pre-processing; report will only show " +
+                    "limited results. Perhaps consider relaxing the filtering " +
+                    "criteria (`--min_read_qual` etc.)."
+            }
+        }
+
         // run variant calling pipeline
         variantCallingPipeline(ch_reads, ref)
 
