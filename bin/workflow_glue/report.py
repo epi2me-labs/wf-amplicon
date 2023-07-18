@@ -86,25 +86,34 @@ def main(args):
     logger = get_named_logger("Report")
 
     # read the meta data for all files
-    meta_df = (
+    metadata = (
         pd.read_json(args.meta_json)
         .set_index("alias")
         .rename(columns=lambda col: col.capitalize())
         .fillna("-")
     )
 
-    report = labs.LabsReport(
-        "Workflow Amplicon Sequencing report", "wf-amplicon", args.params, args.versions
-    )
-
     # read data for report (sort by sample type and alias)
     datasets = sorted(
         [util.ReportDataSet(d) for d in args.data.glob("*")],
         key=lambda x: (
-            SAMPLE_TYPE_ORDER[meta_df.loc[x.sample_alias, "Type"]],
+            SAMPLE_TYPE_ORDER[metadata.loc[x.sample_alias, "Type"]],
             x.sample_alias,
         ),
     )
+
+    # create, fill, and write out the report
+    report = labs.LabsReport(
+        "Workflow Amplicon Sequencing report", "wf-amplicon", args.params, args.versions
+    )
+    populate_report(report, metadata, datasets, args.reference)
+
+    report.write(args.report_fname)
+    logger.info(f"Report written to '{args.report_fname}'.")
+
+
+def populate_report(report, metadata, datasets, ref_fasta):
+    """Fill the report with content."""
     samples = [d.sample_alias for d in datasets]
     # check if any samples are missing any of the required inputs and filter them out
     # (we will mention them in the report below); this could only happen if there were
@@ -112,9 +121,40 @@ def main(args):
     bad_datasets = [d for d in datasets if not d.all_inputs_valid]
     datasets = [d for d in datasets if d.all_inputs_valid]
     ref_seqs = []
-    with pysam.FastxFile(args.reference) as ref_file:
-        for entry in ref_file:
+    with pysam.FastxFile(ref_fasta) as f:
+        for entry in f:
             ref_seqs.append(entry.name)
+
+    # in case there are no "good" datasets, print a short notice to the report and exit
+    # early
+    if not datasets:
+        with report.add_section("Warning: Analysis incomplete!", "Warning!"):
+            if not bad_datasets:
+                # there were no datasets at all
+                html_tags.p(
+                    """
+                    No analysis was run as no valid input data were found!
+                    """
+                )
+                return
+            # we got invalid data for all samples --> warn user and create truncated
+            # report
+            html_tags.p(
+                """
+                The following samples contained insufficient high quality data to be
+                analysed:
+                """,
+                html_tags.ul([html_tags.li(s) for s in samples]),
+                """
+                Therefore, only a limited report is available. Consider relaxing the
+                filtering criteria (e.g. using a lower value for
+                """,
+                html_tags.kbd("--min_read_qual"),
+                ").",
+            )
+        # show the pre-processing stats and omit all other sections
+        preprocessing_section(report, bad_datasets)
+        return
 
     # intro and "at a glance" stats
     with report.add_section("Introduction", "Intro."):
@@ -184,89 +224,8 @@ def main(args):
                         ],
                     )
 
-    # raw reads stats
-    with report.add_section("Preprocessing", "Preproc."):
-        # `fastcat` omits the reads removed during filtering from the per-read stats
-        # file, but includes them in the per-file summary. We'll get some basic summary
-        # stats (number of reads, number of bases, mean qual, etc.) for both sets of
-        # files and put them into a table
-        basic_summary_stats = pd.DataFrame(
-            index=["Raw", "Filtered", "Downsampled, trimmed"],
-            columns=[
-                "reads",
-                "bases",
-                "min_read_length",
-                "max_read_length",
-                "mean_quality",
-            ],
-            dtype=float,
-        )
-        fastcat_per_file_stats = pd.concat((d.fastcat_per_file_stats for d in datasets))
-        basic_summary_stats.loc["Raw"] = [
-            (total_reads := fastcat_per_file_stats["n_seqs"].sum()),
-            fastcat_per_file_stats["n_bases"].sum(),
-            fastcat_per_file_stats["min_length"].min(),
-            fastcat_per_file_stats["max_length"].max(),
-            fastcat_per_file_stats.eval("n_seqs * mean_quality").sum() / total_reads,
-        ]
-        # now get the same stats for after filtering
-        fastcat_per_read_stats = pd.concat((d.fastcat_per_read_stats for d in datasets))
-        basic_summary_stats.loc["Filtered"] = [
-            fastcat_per_read_stats.shape[0],
-            fastcat_per_read_stats["read_length"].sum(),
-            fastcat_per_read_stats["read_length"].min(),
-            fastcat_per_read_stats["read_length"].max(),
-            fastcat_per_read_stats["mean_quality"].mean(),
-        ]
-        # and for after trimming
-        post_trim_per_file_stats = pd.concat(
-            (d.post_trim_per_file_stats for d in datasets)
-        )
-        basic_summary_stats.loc["Downsampled, trimmed"] = [
-            (total_reads := post_trim_per_file_stats["n_seqs"].sum()),
-            post_trim_per_file_stats["n_bases"].sum(),
-            post_trim_per_file_stats["min_length"].min(),
-            post_trim_per_file_stats["max_length"].max(),
-            post_trim_per_file_stats.eval("n_seqs * mean_quality").sum() / total_reads,
-        ]
-        # some formatting
-        for col in ("reads", "bases"):
-            basic_summary_stats[col] = (
-                basic_summary_stats[col].astype(int).apply(util.si_format)
-            )
-        for col in ("min_read_length", "max_read_length"):
-            basic_summary_stats[col] = (
-                basic_summary_stats[col].astype(int).apply(lambda x: f"{x:,d}")
-            )
-        basic_summary_stats["mean_quality"] = basic_summary_stats["mean_quality"].round(
-            1
-        )
-        basic_summary_stats.index.name = "Condition"
-        basic_summary_stats.rename(
-            columns=lambda col: col.capitalize().replace("_", " "), inplace=True
-        )
-        # show the stats in a DataTable
-        html_tags.p(
-            """
-            Some basic stats covering the raw reads and the reads remaining after the
-            initial filtering step (based on length and mean quality) as well as after
-            downsampling and trimming are illustrated in the table below.
-            """
-        )
-        DataTable.from_pandas(basic_summary_stats)
-
-        # `SeqSummary` plots
-        html_tags.p(
-            """
-            The following plots show the read quality and length distributions as well
-            as the base yield after filtering (but before downsampling / trimming) for
-            each sample (use the dropdown menu to view the plots for the
-            individual samples).
-            """
-        )
-        fastcat.SeqSummary(
-            pd.concat((data.fastcat_per_read_stats for data in datasets))
-        )
+    # show preprocessing stats
+    preprocessing_section(report, datasets)
 
     # summarize bamstats results of all samples for the following report sections
     bamstats_summary = util.summarize_bamstats(datasets)
@@ -276,7 +235,7 @@ def main(args):
         bamstats_summary, datasets
     )
     # add sample meta data
-    per_sample_summary_table = pd.concat((meta_df, per_sample_summary_table), axis=1)
+    per_sample_summary_table = pd.concat((metadata, per_sample_summary_table), axis=1)
     per_sample_summary_table.index.name = "Sample alias"
 
     # summary table with one row per amplicon
@@ -357,7 +316,7 @@ def main(args):
     with report.add_section("Variants", "Variants"):
         html_tags.p(
             "Haploid variant calling was performed with Medaka. Variants with low ",
-            "depth (i.e. smaller than ",
+            "depth (i.. smaller than ",
             html_tags.kbd("--min_coverage"),
             ') are shown under the "Low depth" tab.',
         )
@@ -408,5 +367,96 @@ def main(args):
                 use_index=False,
             )
 
-    report.write(args.report_fname)
-    logger.info(f"Report written to '{args.report_fname}'.")
+
+def preprocessing_section(report, datasets):
+    """Add a section with a table of pre-processing stats and the SeqSummary plots."""
+    # `fastcat` omits the reads removed during filtering from the per-read stats
+    # file, but includes them in the per-file summary. We'll get some basic summary
+    # stats (number of reads, number of bases, mean qual, etc.) for both sets of
+    # files and put them into a table
+    preprocessing_stats = pd.DataFrame(
+        index=["Raw", "Filtered", "Downsampled, trimmed"],
+        columns=[
+            "reads",
+            "bases",
+            "min_read_length",
+            "max_read_length",
+            "mean_quality",
+        ],
+        dtype=float,
+    )
+    fastcat_per_file_stats = pd.concat((d.fastcat_per_file_stats for d in datasets))
+    preprocessing_stats.loc["Raw"] = [
+        (total_reads := fastcat_per_file_stats["n_seqs"].sum()),
+        fastcat_per_file_stats["n_bases"].sum(),
+        fastcat_per_file_stats["min_length"].min(),
+        fastcat_per_file_stats["max_length"].max(),
+        (fastcat_per_file_stats.eval("n_seqs * mean_quality").sum() / total_reads)
+        if total_reads != 0
+        else 0,
+    ]
+    # now get the same stats for after filtering
+    fastcat_per_read_stats = pd.concat((d.fastcat_per_read_stats for d in datasets))
+    preprocessing_stats.loc["Filtered"] = [
+        fastcat_per_read_stats.shape[0],
+        fastcat_per_read_stats["read_length"].sum(),
+        fastcat_per_read_stats["read_length"].min(),
+        fastcat_per_read_stats["read_length"].max(),
+        fastcat_per_read_stats["mean_quality"].mean(),
+    ]
+    # and for after trimming
+    post_trim_per_file_stats = pd.concat((d.post_trim_per_file_stats for d in datasets))
+    preprocessing_stats.loc["Downsampled, trimmed"] = [
+        (total_reads := post_trim_per_file_stats["n_seqs"].sum()),
+        post_trim_per_file_stats["n_bases"].sum(),
+        post_trim_per_file_stats["min_length"].min(),
+        post_trim_per_file_stats["max_length"].max(),
+        (post_trim_per_file_stats.eval("n_seqs * mean_quality").sum() / total_reads)
+        if total_reads != 0
+        else 0,
+    ]
+    # there could be NaNs in case some datasets didn't have any reads
+    preprocessing_stats.fillna(0, inplace=True)
+    # some formatting
+    for col in ("reads", "bases"):
+        preprocessing_stats[col] = (
+            preprocessing_stats[col].astype(int).apply(util.si_format)
+        )
+    for col in ("min_read_length", "max_read_length"):
+        preprocessing_stats[col] = (
+            preprocessing_stats[col].astype(int).apply(lambda x: f"{x:,d}")
+        )
+    preprocessing_stats["mean_quality"] = preprocessing_stats["mean_quality"].round(1)
+    preprocessing_stats.index.name = "Condition"
+    preprocessing_stats.rename(
+        columns=lambda col: col.capitalize().replace("_", " "), inplace=True
+    )
+    with report.add_section("Preprocessing", "Preproc."):
+        # show the stats in a DataTable
+        html_tags.p(
+            """
+            Some basic stats covering the raw reads and the reads remaining after the
+            initial filtering step (based on length and mean quality) as well as after
+            downsampling and trimming are illustrated in the table below.
+            """
+        )
+        DataTable.from_pandas(preprocessing_stats)
+
+        # combine all post-filter per-read stats for the SeqSummary
+        comb_per_read_stats = pd.concat(
+            data.fastcat_per_read_stats for data in datasets
+        )
+        # return early if there were no per-read stats (i.e. there were no reads left
+        # after filtering)
+        if comb_per_read_stats.empty:
+            return
+        # `SeqSummary` plots
+        html_tags.p(
+            """
+            The following plots show the read quality and length distributions as well
+            as the base yield after filtering (but before downsampling / trimming) for
+            each sample (use the dropdown menu to view the plots for the
+            individual samples).
+            """
+        )
+        fastcat.SeqSummary(comb_per_read_stats)
