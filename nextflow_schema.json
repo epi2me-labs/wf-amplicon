@@ -215,12 +215,6 @@
         }
     ],
     "properties": {
-        "process_label": {
-            "type": "string",
-            "description": "The main process label for processes to use by default",
-            "hidden": true,
-            "default": "wfamplicon"
-        },
         "aws_image_prefix": {
             "type": "string",
             "hidden": true
