@@ -140,6 +140,12 @@
                     "default": "output",
                     "format": "directory-path",
                     "description": "Directory for output of all workflow results."
+                },
+                "combine_results": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to merge per-sample results into a single BAM / VCF file.",
+                    "help_text": "Per default, results are grouped per sample. With this option, an additional BAM and VCF file are produced which contain the alignments / variants for all samples and amplicons."
                 }
             }
         },

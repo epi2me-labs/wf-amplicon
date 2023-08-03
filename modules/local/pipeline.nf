@@ -9,6 +9,7 @@ process alignReads {
     script:
     """
     minimap2 -t $task.cpus -ax map-ont reference.fasta reads.fastq.gz \
+        -R '@RG\\tID:$meta.alias\\tSM:$meta.alias' \
     | samtools sort -@ $task.cpus -o aligned.sorted.bam -
 
     samtools index aligned.sorted.bam
@@ -129,8 +130,9 @@ process medakaVariant {
     medaka tools annotate --dpsp medaka.vcf reference.fasta input.bam \
         medaka.annotated.unfiltered.vcf
 
-    # filter variants
-    bcftools filter medaka.annotated.unfiltered.vcf \
+    # use the sample alias as sample name in the VCF and filter variants
+    bcftools reheader medaka.annotated.unfiltered.vcf -s <(echo '$meta.alias') \
+    | bcftools filter \
         -e 'INFO/DP < $min_coverage' \
         -s LOW_DEPTH \
         -Oz -o medaka.annotated.vcf.gz
@@ -142,6 +144,35 @@ process medakaVariant {
         -o medaka.consensus.fasta
     """
 }
+
+process mergeVCFs {
+    label "medaka"
+    cpus 1
+    input: path "VCFs/file*.vcf.gz"
+    output: path "combined.vcf.gz"
+    script:
+    """
+    (
+        cd VCFs
+        ls | xargs -n1 bcftools index
+    )
+    bcftools merge VCFs/file*.vcf.gz -Oz -o combined.vcf.gz
+    """
+}
+
+process mergeBAMs {
+    label "wfamplicon"
+    cpus 1
+    input:
+        path "BAMs/file*.bam"
+        path "indices/file*.bam.bai"
+    output: path "combined.bam"
+    script:
+    """
+    samtools merge BAMs/* indices/* -pXo combined.bam
+    """
+}
+
 
 // workflow module
 workflow pipeline {
@@ -196,10 +227,26 @@ workflow pipeline {
         mosdepth.out
         | groupTuple
         | concatMosdepthResultFiles
+
+        // combine per-sample BAM and VCF files if requested
+        combined_vcfs = null
+        combined_bams = null
+        if (params.combine_results) {
+            combined_vcfs = mergeVCFs(
+                medakaVariant.out.filtered.collect { meta, vcf -> vcf }
+            )
+            combined_bams = mergeBAMs(
+                alignReads.out.collect { meta, bam, bai -> bam },
+                alignReads.out.collect { meta, bam, bai -> bai }
+            )
+        }
     emit:
+        sanitized_ref = ref
         mapped = alignReads.out | map { meta, bam, bai -> [meta, bam] }
         mapping_stats = bamstats.out
         depth = concatMosdepthResultFiles.out
         variants = medakaVariant.out.filtered
         consensus = medakaVariant.out.consensus
+        combined_vcfs
+        combined_bams
 }

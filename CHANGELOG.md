@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.0]
+### Changed
+- VCF files now use the sample alias as sample name instead of `SAMPLE`.
+- The reference FASTA file with sanitized sequence headers (with `:`, `*`, and whitespace replaced with `_`) which is used by the workflow internally due to some tools not tolerating these symbols in the sequence IDs is now also published alongside the other results.
+
+### Added
+- Parameter `--combine_results` to also output merged BAM and VCF files.
 
 ## [v0.2.3]
 ### Fixed
