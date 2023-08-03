@@ -221,6 +221,7 @@ workflow pipeline {
         | mix(
             software_versions | map { [it, null] },
             workflow_params | map { [it, null] },
+            variantCallingPipeline.out.sanitized_ref | map { [it, null] },
             variantCallingPipeline.out.variants
             | map { meta, vcf -> [vcf, "$meta.alias/variants"] },
             variantCallingPipeline.out.mapped
@@ -228,6 +229,13 @@ workflow pipeline {
             variantCallingPipeline.out.consensus
             | map { meta, cons -> [cons, "$meta.alias/consensus"] },
         )
+        if (params.combine_results) {
+            ch_to_publish = ch_to_publish
+            | mix(
+                variantCallingPipeline.out.combined_vcfs | map { [it, null] },
+                variantCallingPipeline.out.combined_bams | map { [it, null] },
+            )
+        }
 
         makeReport(
             ch_results_for_report | collect,

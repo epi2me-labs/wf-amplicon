@@ -6,7 +6,7 @@ include:
 variables:
   NF_WORKFLOW_OPTS:
     "--fastq test_data/fastq --reference test_data/reference.fasta \
-    --threads 2"
+    --threads 2 --combine_results"
   CI_FLAVOUR: "new"
 
 docker-run:
@@ -30,7 +30,7 @@ docker-run:
       variables:
         NF_WORKFLOW_OPTS:
           "--fastq test_data/fastq --reference test_data/reference.fasta \
-          --threads 2 --reads_downsampling_size 2000"
+          --threads 2 --reads_downsampling_size 2000 --combine_results"
         NF_PROCESS_FILES: >
           main.nf
           modules/local/pipeline.nf
@@ -44,6 +44,7 @@ docker-run:
           --fastq test_data/fastq
           --reference test_data/reference.fasta
           --min_read_qual 20
+          --combine_results
         NF_PROCESS_FILES: >
           main.nf
           modules/local/pipeline.nf
