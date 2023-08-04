@@ -37,45 +37,54 @@ class ReportDataSet:
             data_dir / "bamstats-flagstat.tsv", sep="\t", index_col=0
         )
         # get the list of amplicons with at least one primary alignment
-        self.detected_amplicons = self.bamstats_flagstat.query("primary > 0").index
+        self.detected_amplicons = (
+            self.bamstats_flagstat.query("primary > 0").index
+            if self.bamstats_flagstat is not None
+            else []
+        )
 
         # read the depth data
         self.depth = self.read_csv(data_dir / "per-window-depth.tsv.gz", sep="\t")
 
-        # read the variants from VCF
-        self.variants = pd.DataFrame(
-            # 'AB' (allelic balance) is the fraction of reads supporting the ALT allele
-            columns=["amp", "pos", "ref", "alt", "type", "filter", "DP", "AB"]
-        ).set_index(["amp", "pos"])
-        # check that the VCF only contains a single sample
-        vcf_file = pysam.VariantFile(vcf_path := data_dir / "medaka.annotated.vcf.gz")
-        if len(vcf_file.header.samples) != 1:
-            raise ValueError(f"Found multiple samples in {vcf_path}.")
-        # process variants
-        for entry in vcf_file.fetch():
-            # we should only have one alt allele
-            if len(entry.alts) != 1:
-                raise ValueError(
-                    f"Found entry with multiple ALT alleles in {vcf_path}."
-                )
-            self.variants.loc[(entry.chrom, entry.pos), :] = [
-                entry.ref,
-                entry.alts[0],
-                # the field `entry.alleles_variant_types` contains a tuple `('REF',
-                # alt-type)`
-                entry.alleles_variant_types[1],
-                entry.filter[0].name,
-                entry.info["DP"],
-                # divide the number of spanning reads supporting the ALT allele by the
-                # number of all reads (`SR` contains a tuple with `(ref fwd, ref rev,
-                # alt1 fwd, alt1 rev`)
-                round(
-                    (entry.info["SR"][2] + entry.info["SR"][3])
-                    * 100
-                    / entry.info["DP"],
-                    1,
-                ),
-            ]
+        # if there is a VCF, read the variants
+        vcf_path = data_dir / "medaka.annotated.vcf.gz"
+        if vcf_path.exists():
+            self.variants = pd.DataFrame(
+                # 'AB' (allelic balance) is the fraction of reads supporting the ALT
+                # allele
+                columns=["amp", "pos", "ref", "alt", "type", "filter", "DP", "AB"]
+            ).set_index(["amp", "pos"])
+            # check that the VCF only contains a single sample
+            vcf_file = pysam.VariantFile(vcf_path)
+            if len(vcf_file.header.samples) != 1:
+                raise ValueError(f"Found multiple samples in {vcf_path}.")
+            # process variants
+            for entry in vcf_file.fetch():
+                # we should only have one alt allele
+                if len(entry.alts) != 1:
+                    raise ValueError(
+                        f"Found entry with multiple ALT alleles in {vcf_path}."
+                    )
+                self.variants.loc[(entry.chrom, entry.pos), :] = [
+                    entry.ref,
+                    entry.alts[0],
+                    # the field `entry.alleles_variant_types` contains a tuple `('REF',
+                    # alt-type)`
+                    entry.alleles_variant_types[1],
+                    entry.filter[0].name,
+                    entry.info["DP"],
+                    # divide the number of spanning reads supporting the ALT allele by
+                    # the number of all reads (`SR` contains a tuple with `(ref fwd, ref
+                    # rev, alt1 fwd, alt1 rev`)
+                    round(
+                        (entry.info["SR"][2] + entry.info["SR"][3])
+                        * 100
+                        / entry.info["DP"],
+                        1,
+                    ),
+                ]
+        else:
+            self.all_inputs_valid = False
 
     def __repr__(self):
         """Return human-readable string (simply the sample alias)."""
@@ -87,7 +96,11 @@ class ReportDataSet:
         This is a wrapper around `pd.read_csv` that sets `self.all_inputs_valid = False`
         if the CSV contains only a header line and no data.
         """
-        df = pd.read_csv(file, **kwargs)
+        try:
+            df = pd.read_csv(file, **kwargs)
+        except FileNotFoundError:
+            self.all_inputs_valid = False
+            return None
         if df.empty:
             self.all_inputs_valid = False
         return df

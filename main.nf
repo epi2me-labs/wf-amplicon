@@ -79,10 +79,11 @@ process porechop {
         tuple val(meta), path("porechopped.fastq.gz"), emit: seqs
         tuple val(meta), path("porechopped-per-file-stats.tsv"), emit: stats
     script:
+    int porechop_threads = Math.max(task.cpus - 2, 1)
     //  run fastcat on porechopped reads so that we can include the post-trimming stats
     //  in the report
     """
-    fastcat <(porechop -i reads.fastq.gz -t $task.cpus --discard_middle) \
+    fastcat <(porechop -i reads.fastq.gz -t $porechop_threads --discard_middle) \
         -s $meta.alias \
         -f porechopped-per-file-stats.tsv \
     | bgzip > porechopped.fastq.gz
@@ -174,29 +175,42 @@ workflow pipeline {
         // add the post-trim stats to the results channel
         ch_per_sample_results = ch_per_sample_results.join(porechop.out.stats)
 
-        // parse the post-porechop fastcat per-file stats to make sure that there are
-        // reads left after pre-processing and throw error otherwise
-        porechop.out.stats
+        // parse the post-porechop fastcat per-file stats to get the number of reads
+        // after filtering for each sample (`splitCsv` actually works on lists as well;
+        // it will emit `[meta, row]` for each row in the CSV, but in this case there is
+        // only one row in each CSV file anyway)
+        ch_post_filter_n_reads = porechop.out.stats
         .splitCsv(sep: "\t", header: true)
-        .collect { meta, stats -> stats['n_seqs'] as int }
-        .map {
-            // sum up the `n_seqs`  column and throw an error if the total is `0`
-            def total_reads = it.inject(0) { res, i -> res + (i as int) }
-            if (total_reads == 0) {
+        .map { meta, stats -> [meta, stats["n_seqs"] as int] }
+
+        // make sure that there are reads left after pre-processing and print a warning
+        // otherwise
+        ch_post_filter_n_reads
+        .collect { meta, n_seqs -> n_seqs }
+        // sum up the `n_seqs`  column and throw an error if the total is `0`
+        .map { if (it.sum() == 0) {
                 log.warn "No reads left after pre-processing; report will only show " +
                     "limited results. Perhaps consider relaxing the filtering " +
                     "criteria (`--min_read_qual` etc.)."
             }
         }
 
-        // run variant calling pipeline
-        variantCallingPipeline(ch_reads, ref)
+        // run variant calling pipeline on samples that still got reads after filtering
+        variantCallingPipeline(
+            ch_reads
+            | join(ch_post_filter_n_reads)
+            | filter { meta, reads, n_seqs -> n_seqs > 0 }
+            | map { meta, reads, n_seqs -> [meta, reads] },
+            ref
+        )
 
         // add variant calling results to main results channel
         ch_per_sample_results = ch_per_sample_results
-        | join(variantCallingPipeline.out.mapping_stats)
-        | join(variantCallingPipeline.out.depth)
-        | join(variantCallingPipeline.out.variants)
+        | join(variantCallingPipeline.out.mapping_stats, remainder: true)
+        | join(variantCallingPipeline.out.depth, remainder: true)
+        | join(variantCallingPipeline.out.variants, remainder: true)
+        // drop any `null`s from the joined list
+        | map { it -> it.findAll { it } }
 
         // collect files for report in directories (one per sample)
         def ch_results_for_report = ch_per_sample_results
