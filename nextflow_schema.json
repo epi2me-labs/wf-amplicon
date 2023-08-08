@@ -17,12 +17,14 @@
                 "fastq": {
                     "type": "string",
                     "format": "path",
+                    "title": "FASTQ",
                     "description": "FASTQ files to use in the analysis.",
                     "help_text": "This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`."
                 },
                 "analyse_unclassified": {
                     "type": "boolean",
                     "default": false,
+                    "title": "Analyse unclassified reads",
                     "description": "Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory.",
                     "help_text": "If selected and if the input is a multiplex directory the workflow will also process the unclassified directory."
                 },
@@ -65,22 +67,23 @@
                 "min_read_length": {
                     "type": "integer",
                     "default": 300,
-                    "description": "Minimum read length.",
-                    "help_text": "Shorter reads will be removed."
+                    "title": "Minimum read length",
+                    "description": "Shorter reads will be removed."
                 },
                 "max_read_length": {
                     "type": "integer",
-                    "description": "Maximum read length.",
-                    "help_text": "Longer reads will be removed."
+                    "title": "Maximum read length",
+                    "description": "Longer reads will be removed."
                 },
                 "min_read_qual": {
                     "type": "number",
                     "default": 10.0,
-                    "description": "Minimum mean read quality.",
-                    "help_text": "Reads with a lower mean quality will be removed."
+                    "title": "Minimum mean read quality",
+                    "description": "Reads with a lower mean quality will be removed."
                 },
                 "reads_downsampling_size": {
                     "type": "integer",
+                    "title": "Downsampling size",
                     "description": "Downsample to this number of reads per sample.",
                     "help_text": "Downsampling is performed after filtering. Set to 0 to disable downsampling."
                 }
@@ -94,6 +97,7 @@
             "properties": {
                 "min_coverage": {
                     "type": "integer",
+                    "title": "Minimum variant coverage",
                     "description": "Minimum coverage for variants to keep.",
                     "help_text": "Only variants covered by more than this number of reads are reported in the resulting VCF file.",
                     "min": 0,
@@ -102,6 +106,7 @@
                 "basecaller_cfg": {
                     "type": "string",
                     "default": "dna_r10.4.1_e8.2_400bps_hac",
+                    "title": "Basecaller configuration",
                     "description": "Name of the basecaller model that processed the signal data; used to select an appropriate Medaka model.",
                     "help_text": "The basecaller configuration is used to automatically select the appropriate Medaka model. The automatic selection can be overridden with the 'medaka_model' parameters. Available models are: 'dna_r10.4.1_e8.2_400bps_hac@v3.5.2', 'dna_r10.4.1_e8.2_400bps_sup@v3.5.2', 'dna_r9.4.1_e8_fast@v3.4', 'dna_r9.4.1_e8_hac@v3.3', 'dna_r9.4.1_e8_sup@v3.3', 'dna_r10.4.1_e8.2_400bps_hac_prom', 'dna_r9.4.1_450bps_hac_prom', 'dna_r10.3_450bps_hac', 'dna_r10.3_450bps_hac_prom', 'dna_r10.4.1_e8.2_260bps_hac', 'dna_r10.4.1_e8.2_260bps_hac_prom', 'dna_r10.4.1_e8.2_400bps_hac', 'dna_r9.4.1_450bps_hac', 'dna_r9.4.1_e8.1_hac', 'dna_r9.4.1_e8.1_hac_prom'.",
                     "enum": [
