@@ -107,18 +107,20 @@ process makeReport {
     input:
         path "data/*"
         path "reference.fasta"
-        path "metadata.json"
+        path sample_sheet
         path "versions.txt"
         path "params.json"
     output:
         path "wf-amplicon-report.html"
     script:
+    String sample_sheet_arg = \
+        sample_sheet.name == OPTIONAL_FILE.name ? "" : "--sample-sheet $sample_sheet"
     """
     workflow-glue report \
         --report-fname wf-amplicon-report.html \
         --data data \
         --reference reference.fasta \
-        --meta-json metadata.json \
+        $sample_sheet_arg \
         --versions versions.txt \
         --params params.json
     """
@@ -157,8 +159,12 @@ workflow pipeline {
         // get reference
         Path ref = file(params.reference, checkIfExists: true)
 
+        // drop elements in `ch_reads` that only contain a metamap (this occurs when
+        // there was an entry in a sample sheet but no corresponding barcode dir)
+        ch_reads = ch_reads.filter { meta, reads, stats_dir -> reads }
+
         // put fastcat stats into results channel
-        def ch_per_sample_results = ch_reads
+        ch_per_sample_results = ch_reads
         | map { meta, reads, stats_dir -> [meta, *file(stats_dir.resolve("*"))] }
 
         // remove fastcat stats from reads channel
@@ -213,7 +219,7 @@ workflow pipeline {
         | map { it -> it.findAll { it } }
 
         // collect files for report in directories (one per sample)
-        def ch_results_for_report = ch_per_sample_results
+        ch_results_for_report = ch_per_sample_results
         | map {
             meta = it[0]
             rest = it[1..-1]
@@ -222,16 +228,9 @@ workflow pipeline {
         | collectFilesInDir
         | map { meta, dirname -> dirname }
 
-        // get all metadata and combine into single JSON file
-        def metadata_json = ch_reads
-        | map { meta, reads -> meta }
-        | collect
-        | map { new JsonBuilder(it).toPrettyString() }
-        | collectFile(name: "metadata.json", newLine: true)
-
         // create channel with files to publish; the channel will have the shape `[file,
         // name of sub-dir to be published in]`.
-        def ch_to_publish = Channel.empty()
+        ch_to_publish = Channel.empty()
         | mix(
             software_versions | map { [it, null] },
             workflow_params | map { [it, null] },
@@ -254,7 +253,7 @@ workflow pipeline {
         makeReport(
             ch_results_for_report | collect,
             ref,
-            metadata_json,
+            file(params.sample_sheet ?: OPTIONAL_FILE),
             software_versions,
             workflow_params,
         )

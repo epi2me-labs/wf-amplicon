@@ -20,14 +20,6 @@ from .util import get_named_logger, wf_parser  # noqa: ABS101
 # number of points in the depth-across-amplicon line plots
 N_DEPTH_WINDOWS = 100
 
-# set order to sort samples by type (as defined in the sample sheet)
-SAMPLE_TYPE_ORDER = {
-    "test_sample": 0,
-    "positive_control": 1,
-    "negative_control": 2,
-    "no_template_control": 3,
-}
-
 
 def argparser():
     """Argument parser for entrypoint."""
@@ -54,9 +46,9 @@ def argparser():
         help="FASTA file with reference sequences for the individual amplicon.",
     )
     parser.add_argument(
-        "--meta-json",
+        "--sample-sheet",
         type=Path,
-        help="JSON file containing the meta data for all samples.",
+        help="Sample sheet with metadata.",
     )
     parser.add_argument(
         "--versions",
@@ -85,22 +77,25 @@ def main(args):
     """Run the entry point."""
     logger = get_named_logger("Report")
 
-    # read the meta data for all files
-    metadata = (
-        pd.read_json(args.meta_json)
-        .set_index("alias")
-        .rename(columns=lambda col: col.capitalize())
-        .fillna("-")
-    )
+    # in case there was a sample sheet, read it so that we can show the metadata in the
+    # per-sample summary table
+    metadata = None
+    if args.sample_sheet:
+        metadata = pd.read_csv(args.sample_sheet, index_col="alias")
 
-    # read data for report (sort by sample type and alias)
+    # read data for report
     datasets = sorted(
         [util.ReportDataSet(d) for d in args.data.glob("*")],
-        key=lambda x: (
-            SAMPLE_TYPE_ORDER[metadata.loc[x.sample_alias, "Type"]],
-            x.sample_alias,
-        ),
+        key=lambda x: x.sample_alias,
     )
+
+    # if there was a sample sheet, make the samples in `datasets` have the same order as
+    # in the sample sheet
+    if metadata is not None:
+        datasets_dict = {d.sample_alias: d for d in datasets}
+        datasets = [
+            datasets_dict[alias] for alias in metadata.index if alias in datasets_dict
+        ]
 
     # create, fill, and write out the report
     report = labs.LabsReport(
@@ -235,7 +230,11 @@ def populate_report(report, metadata, datasets, ref_fasta):
         bamstats_summary, datasets
     )
     # add sample meta data
-    per_sample_summary_table = pd.concat((metadata, per_sample_summary_table), axis=1)
+    per_sample_summary_table = (
+        pd.concat((metadata, per_sample_summary_table), axis=1)
+        .fillna("-")
+        .rename(columns=str.capitalize)
+    )
     per_sample_summary_table.index.name = "Sample alias"
 
     # summary table with one row per amplicon

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased]
 ### Changed
 - No longer publishes empty result files (BAM, VCF, consensus FASTA) for samples which do not have any reads left after pre-processing and filtering.
+- The per-sample summary table in the report no longer shows sample metadata columns unless metadata was provided by the user via a sample sheet.
 
 ## [v0.3.0]
 ### Changed
