@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v0.3.1]
 ### Changed
 - No longer publishes empty result files (BAM, VCF, consensus FASTA) for samples which do not have any reads left after pre-processing and filtering.
 - Now uses Medaka v1.8.2. Options for `basecaller_cfg` were updated accordingly. The default now is `dna_r10.4.1_e8.2_400bps_sup@v4.2.0`.
