@@ -77,7 +77,7 @@
                 },
                 "min_read_qual": {
                     "type": "number",
-                    "default": 10.0,
+                    "default": 10,
                     "title": "Minimum mean read quality",
                     "description": "Reads with a lower mean quality will be removed."
                 },
@@ -195,12 +195,14 @@
                 },
                 "help": {
                     "type": "boolean",
+                    "default": false,
                     "description": "Display help text.",
                     "fa_icon": "fas fa-question-circle",
                     "hidden": true
                 },
                 "version": {
                     "type": "boolean",
+                    "default": false,
                     "description": "Display version and exit.",
                     "fa_icon": "fas fa-question-circle",
                     "hidden": true
