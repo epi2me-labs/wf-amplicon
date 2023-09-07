@@ -100,7 +100,7 @@
                     "title": "Minimum variant coverage",
                     "description": "Minimum coverage for variants to keep.",
                     "help_text": "Only variants covered by more than this number of reads are reported in the resulting VCF file.",
-                    "min": 0,
+                    "minimum": 0,
                     "default": 20
                 },
                 "basecaller_cfg": {
@@ -171,7 +171,7 @@
                     "type": "integer",
                     "description": "Number of windows used during depth of coverage calculations.",
                     "help_text": "Depth of coverage is calculated for each sample across each amplicon split into this number of windows. A higher number will produce more fine-grained results at the expense of run time. Values of 100-200 should be suitable in the vast majority of cases.",
-                    "min": 10,
+                    "minimum": 10,
                     "default": 100
                 },
                 "medaka_target_depth_per_strand": {
