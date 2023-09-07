@@ -28,6 +28,24 @@ process bamstats {
     """
 }
 
+process downsampleBAMforMedaka {
+    label "wfamplicon"
+    cpus 1
+    input:
+        tuple val(meta), path("input.bam"), path("input.bam.bai"), path("bamstats.tsv")
+    output: tuple val(meta), path("downsampled.bam"), path("downsampled.bam.bai")
+    script:
+    """
+    workflow-glue get_reads_with_longest_aligned_ref_len \
+        bamstats.tsv \
+        $params.medaka_target_depth_per_strand\
+    > downsampled.read_IDs
+
+    samtools view input.bam -N downsampled.read_IDs -o downsampled.bam
+    samtools index downsampled.bam
+    """
+}
+
 process mosdepth {
     label "wfamplicon"
     cpus Math.min(params.threads, 3)
@@ -198,13 +216,24 @@ workflow pipeline {
         // align to reference
         alignReads(ch_reads, ref)
 
+        // get mapping stats for report and pre-Medaka downsampling
+        bamstats(alignReads.out)
+
+        // downsample to target depth before running Medaka
+        alignReads.out
+        | join(bamstats.out)
+        | map { meta, bam, bai, bamstats, flagstat ->
+            [meta, bam, bai, bamstats]
+        }
+        | downsampleBAMforMedaka
+
         // get the seq IDs of the amplicons from the ref file
         def ch_amplicon_seqIDs = ref | splitFasta(record: [id: true]) | map { it.id }
 
         // run medaka consensus (the process will run once for each sample--amplicon
         // combination)
         def ch_medaka_consensus_probs = medakaConsensus(
-            alignReads.out | combine(ch_amplicon_seqIDs),
+            downsampleBAMforMedaka.out | combine(ch_amplicon_seqIDs),
             medaka_model
         ) | groupTuple
 
@@ -214,9 +243,6 @@ workflow pipeline {
             ref,
             params.min_coverage
         )
-
-        // get mapping stats for report
-        bamstats(alignReads.out)
 
         // run mosdepth on each sample--amplicon combination
         mosdepth(

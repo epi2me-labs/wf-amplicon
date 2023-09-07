@@ -48,7 +48,7 @@ docker-run:
         NF_PROCESS_FILES: >
           main.nf
           modules/local/pipeline.nf
-        NF_IGNORE_PROCESSES: downsampleReads,alignReads,bamstats,concatMosdepthResultFiles,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,mosdepth
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,alignReads,bamstats,concatMosdepthResultFiles,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,mosdepth
         AFTER_NEXTFLOW_CMD: |
           grep 'No reads left after pre-processing' .nextflow.log &&
           grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
