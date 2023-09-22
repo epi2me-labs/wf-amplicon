@@ -4,7 +4,7 @@ import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
 include { fastq_ingress } from "./lib/fastqingress"
-include { pipeline as variantCallingPipeline } from "./modules/local/pipeline"
+include { pipeline as variantCallingPipeline } from "./modules/local/reference-based"
 
 
 OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
@@ -93,8 +93,8 @@ process porechop {
 process collectFilesInDir {
     label "wfamplicon"
     cpus 1
-    input: tuple val(meta), path("staging_dir/*"), val(dirname)
-    output: tuple val(meta), path(dirname)
+    input: tuple path("staging_dir/*"), val(dirname)
+    output: path(dirname)
     script:
     """
     mv staging_dir $dirname
@@ -107,14 +107,16 @@ process makeReport {
     input:
         path "data/*"
         path "reference.fasta"
-        path sample_sheet
+        path sample_sheet, stageAs: "sample_sheet/*"
         path "versions.txt"
         path "params.json"
     output:
         path "wf-amplicon-report.html"
     script:
-    String sample_sheet_arg = \
-        sample_sheet.name == OPTIONAL_FILE.name ? "" : "--sample-sheet $sample_sheet"
+    // we need to check `.fileName.name` here because `TaskPath.name` includes the
+    // staging directory (https://github.com/nextflow-io/nextflow/issues/3574)
+    String sample_sheet_arg = sample_sheet.fileName.name == OPTIONAL_FILE.name ? "" : \
+        "--sample-sheet \"$sample_sheet\""
     """
     workflow-glue report \
         --report-fname wf-amplicon-report.html \
@@ -156,6 +158,19 @@ workflow pipeline {
         def software_versions = getVersions() | addMedakaToVersionsFile
         def workflow_params = getParams()
 
+        // Make channel to hold the results required for the report. It will have the
+        // shape `[meta, file(s)]` where the second item can be a list of files or an
+        // individual file.
+        ch_results_for_report = Channel.empty()
+        // Make a channel for the files to be published. It will look like `[file, name
+        // of sub-dir to be published in | null]` (when `null`, the file will be
+        // published in the top level output directory).
+        ch_to_publish = Channel.empty()
+        | mix(
+            software_versions | map { [it, null] },
+            workflow_params | map { [it, null] },
+        )
+
         // get reference
         Path ref = file(params.reference, checkIfExists: true)
 
@@ -163,8 +178,8 @@ workflow pipeline {
         // there was an entry in a sample sheet but no corresponding barcode dir)
         ch_reads = ch_reads.filter { meta, reads, stats_dir -> reads }
 
-        // put fastcat stats into results channel
-        ch_per_sample_results = ch_reads
+        // add fastcat stats of raw reads to channel with results for report
+        ch_results_for_report = ch_reads
         | map { meta, reads, stats_dir -> [meta, *file(stats_dir.resolve("*"))] }
 
         // remove fastcat stats from reads channel
@@ -178,8 +193,8 @@ workflow pipeline {
         // trim adapters
         ch_reads = porechop(ch_reads).seqs
 
-        // add the post-trim stats to the results channel
-        ch_per_sample_results = ch_per_sample_results.join(porechop.out.stats)
+        // add the post-trim stats to the report channel
+        ch_results_for_report = ch_results_for_report.join(porechop.out.stats)
 
         // parse the post-porechop fastcat per-file stats to get the number of reads
         // after filtering for each sample (`splitCsv` actually works on lists as well;
@@ -201,39 +216,24 @@ workflow pipeline {
             }
         }
 
-        // run variant calling pipeline on samples that still got reads after filtering
-        variantCallingPipeline(
-            ch_reads
-            | join(ch_post_filter_n_reads)
-            | filter { meta, reads, n_seqs -> n_seqs > 0 }
-            | map { meta, reads, n_seqs -> [meta, reads] },
-            ref
-        )
+        // drop samples for which all reads have been removed during filtering
+        ch_reads = ch_reads
+        | join(ch_post_filter_n_reads)
+        | filter { meta, reads, n_seqs -> n_seqs > 0 }
+        | map { meta, reads, n_seqs -> [meta, reads] }
 
-        // add variant calling results to main results channel
-        ch_per_sample_results = ch_per_sample_results
+        variantCallingPipeline(ch_reads, ref)
+
+        // add variant calling results to channels for the report + to publish
+        ch_results_for_report = ch_results_for_report
         | join(variantCallingPipeline.out.mapping_stats, remainder: true)
         | join(variantCallingPipeline.out.depth, remainder: true)
         | join(variantCallingPipeline.out.variants, remainder: true)
         // drop any `null`s from the joined list
         | map { it -> it.findAll { it } }
 
-        // collect files for report in directories (one per sample)
-        ch_results_for_report = ch_per_sample_results
-        | map {
-            meta = it[0]
-            rest = it[1..-1]
-            [meta, rest, meta.alias]
-        }
-        | collectFilesInDir
-        | map { meta, dirname -> dirname }
-
-        // create channel with files to publish; the channel will have the shape `[file,
-        // name of sub-dir to be published in]`.
-        ch_to_publish = Channel.empty()
+        ch_to_publish = ch_to_publish
         | mix(
-            software_versions | map { [it, null] },
-            workflow_params | map { [it, null] },
             variantCallingPipeline.out.sanitized_ref | map { [it, null] },
             variantCallingPipeline.out.variants
             | map { meta, vcf -> [vcf, "$meta.alias/variants"] },
@@ -242,6 +242,7 @@ workflow pipeline {
             variantCallingPipeline.out.consensus
             | map { meta, cons -> [cons, "$meta.alias/consensus"] },
         )
+        // combine VCF and BAM files if requested
         if (params.combine_results) {
             ch_to_publish = ch_to_publish
             | mix(
@@ -250,6 +251,16 @@ workflow pipeline {
             )
         }
 
+        // collect files for report in directories (one dir per sample)
+        ch_results_for_report = ch_results_for_report
+        | map {
+            meta = it[0]
+            files = it[1..-1]
+            [files, meta.alias]
+        }
+        | collectFilesInDir
+
+        // create the report and add it to the publishing channel
         makeReport(
             ch_results_for_report | collect,
             ref,
@@ -257,7 +268,6 @@ workflow pipeline {
             software_versions,
             workflow_params,
         )
-
         ch_to_publish = ch_to_publish
         | mix(makeReport.out | map { [it, null] } )
 
