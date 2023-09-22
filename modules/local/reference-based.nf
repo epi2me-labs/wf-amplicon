@@ -1,32 +1,11 @@
-process alignReads {
-    label "wfamplicon"
-    cpus params.threads
-    input:
-        tuple val(meta), path("reads.fastq.gz")
-        path "reference.fasta"
-    output:
-        tuple val(meta), path("*.bam"), path("*.bai")
-    script:
-    """
-    minimap2 -t $task.cpus -ax map-ont reference.fasta reads.fastq.gz \
-        -R '@RG\\tID:$meta.alias\\tSM:$meta.alias' \
-    | samtools sort -@ $task.cpus -o aligned.sorted.bam -
+include {
+    alignReads;
+    bamstats;
+    mosdepth;
+    concatMosdepthResultFiles;
+    lookupMedakaVariantModel
+} from "./common"
 
-    samtools index aligned.sorted.bam
-    """
-}
-
-process bamstats {
-    label "wfamplicon"
-    cpus Math.min(params.threads, 2)
-    input: tuple val(meta), path("input.bam"), path("input.bam.bai")
-    output: tuple val(meta), path("bamstats.tsv"), path("bamstats-flagstat.tsv")
-    script:
-    """
-    bamstats -u input.bam -s $meta.alias -f bamstats-flagstat.tsv -t $task.cpus \
-    > bamstats.tsv
-    """
-}
 
 process downsampleBAMforMedaka {
     label "wfamplicon"
@@ -46,47 +25,6 @@ process downsampleBAMforMedaka {
     """
 }
 
-process mosdepth {
-    label "wfamplicon"
-    cpus Math.min(params.threads, 3)
-    input:
-        tuple val(meta), path("input.bam"), path("input.bam.bai"), val(ref_id)
-        val n_windows
-    output: tuple val(meta), path("depth.regions.bed.gz")
-    script:
-    int mosdepth_extra_threads = task.cpus - 1
-    """
-    # get the length of the reference
-    ref_length=\$(samtools idxstats input.bam | awk '\$1 == "$ref_id" {print \$2}')
-
-    # calculate the corresponding window length (check `ref_length` first because
-    # `expr a / b` returns non-zero exit code when `a < b`)
-    if [ "\$ref_length" -lt "$n_windows" ]; then
-        window_length=1
-    else
-        window_length=\$(expr \$ref_length / $n_windows)
-    fi
-
-    # get the depths (we could add `-x`, but it loses a lot of detail from the depth
-    # curves)
-    mosdepth -b \$window_length -n -c "$ref_id" depth input.bam
-    """
-}
-
-process concatMosdepthResultFiles {
-    label "wfamplicon"
-    cpus 1
-    input: tuple val(meta), path("depth.*.bed.gz")
-    output: tuple val(meta), path("per-window-depth.tsv.gz")
-    script:
-    """
-    # add a header line and concatenate the depth .bed files (note that gzipped data
-    # can be concatenated just like regular data)
-    cat <(printf "ref\\tstart\\tend\\tdepth\\n" | gzip) depth.*.bed.gz \
-    > per-window-depth.tsv.gz
-    """
-}
-
 process sanitizeRefFile {
     // some tools can't deal with `:` or `*` in ref FASTA ID lines --> replace them (and
     // whitespace) with underscores
@@ -98,21 +36,6 @@ process sanitizeRefFile {
     """
     sed '/^>/s/:\\|\\*\\| /_/g' reference.fasta > reference_sanitized_seqIDs.fasta
     """
-}
-
-process lookupMedakaVariantModel {
-    label "wfamplicon"
-    input:
-        path("lookup_table")
-        val basecall_model
-    output:
-        stdout
-    shell:
-    '''
-    medaka_model=$(workflow-glue resolve_medaka_model \
-        lookup_table '!{basecall_model}' "medaka_variant")
-    echo -n $medaka_model
-    '''
 }
 
 process medakaConsensus {
@@ -214,7 +137,9 @@ workflow pipeline {
         }
 
         // align to reference
-        alignReads(ch_reads, ref)
+        ch_reads
+        | combine(ref)
+        | alignReads
 
         // get mapping stats for report and pre-Medaka downsampling
         bamstats(alignReads.out)
