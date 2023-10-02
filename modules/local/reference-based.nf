@@ -193,7 +193,7 @@ workflow pipeline {
         }
     emit:
         sanitized_ref = ref
-        mapped = alignReads.out | map { meta, bam, bai -> [meta, bam] }
+        mapped = alignReads.out
         mapping_stats = bamstats.out
         depth = concatMosdepthResultFiles.out
         variants = medakaVariant.out.filtered
