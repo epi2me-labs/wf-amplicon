@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.5]
+### Changed
+- The workflow now also outputs BAM index files.
+
 ## [v0.3.4]
 ### Changed
 - The workflow now downsamples reads for each amplicon to be in the suitable depth range for Medaka.

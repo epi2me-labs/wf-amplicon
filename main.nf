@@ -238,7 +238,8 @@ workflow pipeline {
             variantCallingPipeline.out.variants
             | map { meta, vcf -> [vcf, "$meta.alias/variants"] },
             variantCallingPipeline.out.mapped
-            | map { meta, bam -> [bam, "$meta.alias/alignments"] },
+            | map { meta, bam, bai -> [[bam, bai], "$meta.alias/alignments"] }
+            | transpose,
             variantCallingPipeline.out.consensus
             | map { meta, cons -> [cons, "$meta.alias/consensus"] },
         )
