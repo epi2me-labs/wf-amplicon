@@ -3,7 +3,7 @@
 import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
-include { fastq_ingress } from "./lib/fastqingress"
+include { fastq_ingress } from "./lib/ingress"
 include { pipeline as variantCallingPipeline } from "./modules/local/reference-based"
 
 
@@ -281,9 +281,7 @@ workflow pipeline {
 WorkflowMain.initialise(workflow, params, log)
 workflow {
 
-    if (params.disable_ping == false) {
-        Pinguscript.ping_post(workflow, "start", "none", params.out_dir, params)
-    }
+    Pinguscript.ping_start(nextflow, workflow, params)
 
     ArrayList fastcat_extra_args = []
     if (params.min_read_length) { fastcat_extra_args << "-a $params.min_read_length" }
@@ -295,7 +293,7 @@ workflow {
         "sample":params.sample,
         "sample_sheet":params.sample_sheet,
         "analyse_unclassified":params.analyse_unclassified,
-        "fastcat_stats": true,
+        "stats": true,
         "fastcat_extra_args": fastcat_extra_args.join(" ")])
 
     // run workflow
@@ -308,12 +306,9 @@ workflow {
     | output
 }
 
-if (params.disable_ping == false) {
-    workflow.onComplete {
-        Pinguscript.ping_post(workflow, "end", "none", params.out_dir, params)
-    }
-
-    workflow.onError {
-        Pinguscript.ping_post(workflow, "error", "$workflow.errorMessage", params.out_dir, params)
-    }
+workflow.onComplete {
+    Pinguscript.ping_complete(nextflow, workflow, params)
+}
+workflow.onError {
+    Pinguscript.ping_error(nextflow, workflow, params)
 }

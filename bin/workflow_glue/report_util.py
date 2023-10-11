@@ -24,7 +24,7 @@ class ReportDataSet:
         # read the fastcat per-read stats (these include all reads present after
         # filtering and before downsampling or trimming)
         self.fastcat_per_read_stats = self.read_csv(
-            data_dir / "per-read-stats.tsv", sep="\t", index_col="read_id"
+            data_dir / "per-read-stats.tsv.gz", sep="\t", index_col="read_id"
         )
         # read the post-trimming fastcat per-file stats
         self.post_trim_per_file_stats = self.read_csv(
