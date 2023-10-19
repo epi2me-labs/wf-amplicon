@@ -3,13 +3,18 @@
 This [Nextflow](https://www.nextflow.io/) workflow provides a simple way to
 analyse Oxford Nanopore reads generated from amplicons.
 
-It requires the raw reads and a reference FASTA file containing one sequence per
-amplicon. After filtering (based on read length and quality) and trimming,
-reads are aligned to the reference using
-[minimap2](https://github.com/lh3/minimap2). Variants are then called with
-[Medaka](https://github.com/nanoporetech/medaka). Results include an interactive
-HTML report and VCF files containing the called variants.
+The workflow requires raw reads in FASTQ format and can be run in two modes:
+* With a reference: After initial filtering (based on read length and quality)
+  and adapter trimming, [minimap2](https://github.com/lh3/minimap2) is used to
+  align the reads to a reference FASTA file (please note that the reference
+  should only contain the expected sequences of the individual amplicons).
+  Variants are then called with
+  [Medaka](https://github.com/nanoporetech/medaka).
+* Without a reference: Like for the "reference mode", reads are first filtered
+  and trimmed. Then, `medaka smolecule` is used to generate the consensus of the
+  reads of each sample _de novo_. Reads are re-aligned against the consensus to
+  produce coverage plots for the report.
 
-As mentioned above, the reference FASTA file needs to contain one sequence per
-amplicon for now. An option to provide a whole-genome reference file and pairs
-of primers might be added in the future if requested by users.
+The results of the workflow include an interactive HTML report, FASTA files with
+the consensus sequences of the amplicons, BAM files with the alignments, and VCF
+files containing the variants (if run in "reference mode").

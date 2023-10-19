@@ -31,7 +31,7 @@ process mosdepth {
     input:
         tuple val(meta), path("input.bam"), path("input.bam.bai"), val(ref_id)
         val n_windows
-    output: tuple val(meta), path("depth.regions.bed.gz")
+    output: tuple val(meta), path("depth.regions.bed.gz"), optional: true
     script:
     int mosdepth_extra_threads = task.cpus - 1
     ref_id = ref_id ?: ""
@@ -44,6 +44,10 @@ process mosdepth {
     # ID from the idxstats
     if [ -z "\$REF_ID" ]; then
         REF_ID=\$(head -n1 idxstats | cut -f1)
+        if [[ \$REF_ID = '*' ]]; then
+            echo "QUITTING: Only unmapped reads in 'input.bam'."
+            exit 0
+        fi
     fi
 
     # get the length of the reference
@@ -76,17 +80,18 @@ process concatMosdepthResultFiles {
     """
 }
 
-process lookupMedakaVariantModel {
+process lookupMedakaModel {
     label "wfamplicon"
     input:
         path("lookup_table")
         val basecall_model
+        val model_type
     output:
         stdout
     shell:
     '''
     medaka_model=$(workflow-glue resolve_medaka_model \
-        lookup_table '!{basecall_model}' "medaka_variant")
+        lookup_table '!{basecall_model}' !{model_type})
     echo -n $medaka_model
     '''
 }

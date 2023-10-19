@@ -5,6 +5,7 @@ nextflow.enable.dsl = 2
 
 include { fastq_ingress } from "./lib/ingress"
 include { pipeline as variantCallingPipeline } from "./modules/local/reference-based"
+include { pipeline as smoleculePipeline } from "./modules/local/smolecule"
 
 
 OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
@@ -106,7 +107,7 @@ process makeReport {
     cpus 1
     input:
         path "data/*"
-        path "reference.fasta"
+        path ref, stageAs: "ref/*"
         path sample_sheet, stageAs: "sample_sheet/*"
         path "versions.txt"
         path "params.json"
@@ -117,11 +118,13 @@ process makeReport {
     // staging directory (https://github.com/nextflow-io/nextflow/issues/3574)
     String sample_sheet_arg = sample_sheet.fileName.name == OPTIONAL_FILE.name ? "" : \
         "--sample-sheet \"$sample_sheet\""
+    String ref_arg = ref.fileName.name == OPTIONAL_FILE.name ? "" : \
+        "--reference \"$ref\""
     """
     workflow-glue report \
         --report-fname wf-amplicon-report.html \
         --data data \
-        --reference reference.fasta \
+        $ref_arg \
         $sample_sheet_arg \
         --versions versions.txt \
         --params params.json
@@ -171,9 +174,6 @@ workflow pipeline {
             workflow_params | map { [it, null] },
         )
 
-        // get reference
-        Path ref = file(params.reference, checkIfExists: true)
-
         // drop elements in `ch_reads` that only contain a metamap (this occurs when
         // there was an entry in a sample sheet but no corresponding barcode dir)
         ch_reads = ch_reads.filter { meta, reads, stats_dir -> reads }
@@ -208,7 +208,7 @@ workflow pipeline {
         // otherwise
         ch_post_filter_n_reads
         .collect { meta, n_seqs -> n_seqs }
-        // sum up the `n_seqs`  column and throw an error if the total is `0`
+        // sum up the `n_seqs` column and print warning if the total is `0`
         .map { if (it.sum() == 0) {
                 log.warn "No reads left after pre-processing; report will only show " +
                     "limited results. Perhaps consider relaxing the filtering " +
@@ -216,39 +216,68 @@ workflow pipeline {
             }
         }
 
-        // drop samples for which all reads have been removed during filtering
+        // drop samples with fewer than `params.min_n_reads` reads after filtering
         ch_reads = ch_reads
         | join(ch_post_filter_n_reads)
-        | filter { meta, reads, n_seqs -> n_seqs > 0 }
-        | map { meta, reads, n_seqs -> [meta, reads] }
+        | filter { meta, reads, n_seqs -> n_seqs >= params.min_n_reads }
 
-        variantCallingPipeline(ch_reads, ref)
+        Path ref = OPTIONAL_FILE
+        if (params.reference) {
+            // ref-based mode; make sure the ref file exists and run the variant calling
+            // pipeline
+            ref = file(params.reference, checkIfExists: true)
 
-        // add variant calling results to channels for the report + to publish
-        ch_results_for_report = ch_results_for_report
-        | join(variantCallingPipeline.out.mapping_stats, remainder: true)
-        | join(variantCallingPipeline.out.depth, remainder: true)
-        | join(variantCallingPipeline.out.variants, remainder: true)
-        // drop any `null`s from the joined list
-        | map { it -> it.findAll { it } }
+            variantCallingPipeline(
+                ch_reads | map { meta, reads, n_seqs -> [meta, reads] },
+                ref
+            )
 
-        ch_to_publish = ch_to_publish
-        | mix(
-            variantCallingPipeline.out.sanitized_ref | map { [it, null] },
-            variantCallingPipeline.out.variants
-            | map { meta, vcf -> [vcf, "$meta.alias/variants"] },
-            variantCallingPipeline.out.mapped
-            | map { meta, bam, bai -> [[bam, bai], "$meta.alias/alignments"] }
-            | transpose,
-            variantCallingPipeline.out.consensus
-            | map { meta, cons -> [cons, "$meta.alias/consensus"] },
-        )
-        // combine VCF and BAM files if requested
-        if (params.combine_results) {
+            // add variant calling results to channels for the report + to publish
+            ch_results_for_report = ch_results_for_report
+            | join(variantCallingPipeline.out.mapping_stats, remainder: true)
+            | join(variantCallingPipeline.out.depth, remainder: true)
+            | join(variantCallingPipeline.out.variants, remainder: true)
+            // drop any `null`s from the joined list
+            | map { it - null }
+
             ch_to_publish = ch_to_publish
             | mix(
-                variantCallingPipeline.out.combined_vcfs | map { [it, null] },
-                variantCallingPipeline.out.combined_bams | map { [it, null] },
+                variantCallingPipeline.out.sanitized_ref | map { [it, null] },
+                variantCallingPipeline.out.variants
+                | map { meta, vcf -> [vcf, "$meta.alias/variants"] },
+                variantCallingPipeline.out.mapped
+                | map { meta, bam, bai -> [[bam, bai], "$meta.alias/alignments"] }
+                | transpose,
+                variantCallingPipeline.out.consensus
+                | map { meta, cons -> [cons, "$meta.alias/consensus"] },
+            )
+            // combine VCF and BAM files if requested
+            if (params.combine_results) {
+                ch_to_publish = ch_to_publish
+                | mix(
+                    variantCallingPipeline.out.combined_vcfs | map { [it, null] },
+                    variantCallingPipeline.out.combined_bams | map { [it, null] },
+                )
+            }
+        } else {
+            // no reference; run medaka smolecule on each sample
+            smoleculePipeline(ch_reads)
+
+            // add `smolecule` results to main results channel
+            ch_results_for_report = ch_results_for_report
+            | join(smoleculePipeline.out.mapping_stats, remainder: true)
+            | join(smoleculePipeline.out.depth, remainder: true)
+            // drop any `null`s from the joined list
+            | map { it -> it.findAll { it } }
+
+            // collect files for report in directories (one dict per sample)
+            ch_to_publish = ch_to_publish
+            | mix(
+                smoleculePipeline.out.consensus
+                | map { meta, cons -> [cons, "$meta.alias/consensus"] },
+                smoleculePipeline.out.mapped
+                | map { meta, bam, bai -> [[bam, bai], "$meta.alias/alignments"] }
+                | transpose,
             )
         }
 

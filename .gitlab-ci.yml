@@ -4,9 +4,11 @@ include:
     file: "wf-containers.yaml"
 
 variables:
-  NF_WORKFLOW_OPTS:
-    "--fastq test_data/fastq --reference test_data/reference.fasta \
-    --threads 2 --combine_results"
+  NF_WORKFLOW_OPTS: >
+    --fastq test_data/fastq
+    --reference test_data/reference.fasta
+    --threads 2
+    --combine_results
   CI_FLAVOUR: "new"
 
 docker-run:
@@ -19,7 +21,7 @@ docker-run:
   #   the variables, but it is broken when using long strings! See CW-756
   parallel:
     matrix:
-      - MATRIX_NAME: ["ref", "filter-all"]
+      - MATRIX_NAME: ["ref", "filter-all", "no-ref"]
   rules:
     # NOTE As we're overriding the rules block for the included docker-run
     #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
@@ -28,9 +30,12 @@ docker-run:
       when: never
     - if: $MATRIX_NAME == "ref"
       variables:
-        NF_WORKFLOW_OPTS:
-          "--fastq test_data/fastq --reference test_data/reference.fasta \
-          --threads 2 --reads_downsampling_size 2000 --combine_results"
+        NF_WORKFLOW_OPTS: >
+          --fastq test_data/fastq
+          --reference test_data/reference.fasta
+          --threads 2
+          --reads_downsampling_size 2000
+          --combine_results
         NF_PROCESS_FILES: >
           main.nf
           modules/local/reference-based.nf
@@ -52,3 +57,12 @@ docker-run:
         AFTER_NEXTFLOW_CMD: |
           grep 'No reads left after pre-processing' .nextflow.log &&
           grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
+
+    - if: $MATRIX_NAME == "no-ref"
+      variables:
+        NF_WORKFLOW_OPTS: >
+          --fastq test_data/fastq/barcode03
+        NF_PROCESS_FILES: >
+          main.nf
+          modules/local/smolecule.nf
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads

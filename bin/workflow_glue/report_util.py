@@ -38,22 +38,26 @@ class ReportDataSet:
         )
         # get the list of amplicons with at least one primary alignment
         self.detected_amplicons = (
-            self.bamstats_flagstat.query("primary > 0").index
+            list(self.bamstats_flagstat.query("primary > 0").index)
             if self.bamstats_flagstat is not None
             else []
         )
+        if not self.detected_amplicons:
+            # no amplicons were deteced (i.e. not a single read mapped to any of the
+            # sequences in the reference file)
+            self.all_inputs_valid = False
 
         # read the depth data
         self.depth = self.read_csv(data_dir / "per-window-depth.tsv.gz", sep="\t")
 
         # if there is a VCF, read the variants
         vcf_path = data_dir / "medaka.annotated.vcf.gz"
+        self.variants = pd.DataFrame(
+            # 'AB' (allelic balance) is the fraction of reads supporting the ALT
+            # allele
+            columns=["amp", "pos", "ref", "alt", "type", "filter", "DP", "AB"]
+        ).set_index(["amp", "pos"])
         if vcf_path.exists():
-            self.variants = pd.DataFrame(
-                # 'AB' (allelic balance) is the fraction of reads supporting the ALT
-                # allele
-                columns=["amp", "pos", "ref", "alt", "type", "filter", "DP", "AB"]
-            ).set_index(["amp", "pos"])
             # check that the VCF only contains a single sample
             vcf_file = pysam.VariantFile(vcf_path)
             if len(vcf_file.header.samples) != 1:
@@ -83,8 +87,6 @@ class ReportDataSet:
                         1,
                     ),
                 ]
-        else:
-            self.all_inputs_valid = False
 
     def __repr__(self):
         """Return human-readable string (simply the sample alias)."""
@@ -105,34 +107,31 @@ class ReportDataSet:
             self.all_inputs_valid = False
         return df
 
-    def get_basic_summary_stats(self):
+    def get_basic_summary_stats(self, ref_mode):
         """Collect basic summary stats.
 
         This is used in the "at a glance" section at the beginning of the report.
         """
+        # create series to hold the summary stats and add stats that are needed in
+        # no-ref and with-ref mode
         basic_summary = pd.Series(
             0,
-            index=[
-                "reads",
-                "bases",
-                "mean_length",
-                "mean_quality",
-                "amplicons",
-                "overall_mean_depth",
-                "min_mean_depth",
-                "snps",
-                "indels",
-            ],
+            index=["reads", "bases", "mean_length", "mean_quality"],
         )
         basic_summary["reads"] = self.post_trim_per_file_stats["n_seqs"].sum()
         basic_summary["bases"] = self.post_trim_per_file_stats["n_bases"].sum()
         basic_summary["mean_quality"] = (
-            self.post_trim_per_file_stats.eval("n_seqs * mean_quality").sum()
+            self.post_trim_per_file_stats.eval("n_seqs * mean_quality")
             / basic_summary["reads"]
         )
         basic_summary["mean_length"] = self.post_trim_per_file_stats.eval(
             "n_bases / n_seqs"
         )
+        # if in no-ref mode, add the no-ref-only stats and return
+        if not ref_mode:
+            basic_summary["unmapped_reads"] = self.bamstats.eval('ref == "*"').sum()
+            basic_summary["consensus_length"] = self.depth["end"].iloc[-1]
+            return basic_summary
         basic_summary["amplicons"] = len(self.detected_amplicons)
         # now get the mean depths. we got different window sizes for the different
         # amplicons. thus, we'll
@@ -328,10 +327,10 @@ def format_stats_table(df):
         df_for_table.rename(index={"*": "Unmapped"})
         .rename_axis(index=str.capitalize)
         .rename(
-            columns=lambda col: col.replace("_", " ")
-            .replace("variants", "variants (indels)")
-            .replace("mean_acc", "mean acc.")
-            .replace("mean_cov", "mean cov.")
+            columns=lambda col: col.replace("variants", "variants (indels)")
+            .replace("mean_acc", "mean_acc.")
+            .replace("mean_cov", "mean_cov.")
+            .replace("_", " ")
             .capitalize()
         )
     )
@@ -424,3 +423,53 @@ def format_per_amplicon_summary_table(summary_stats, datasets):
         ].sum()
     per_amplicon_summary_stats.fillna(0, inplace=True)
     return format_stats_table(per_amplicon_summary_stats)
+
+
+def format_no_ref_summary_table(summary_stats, datasets):
+    """Summarize and format per-sample bamstats results in no-ref mode.
+
+    `summary_stats` contains summary stats for each sample--amplicon combination. In the
+    no-ref case this means there are two rows for each sample. One for the reads that
+    were successfully re-aligned against the consensus (`summary_stats.loc[sample_name,
+    sample_name]`) and one for the reads that did not re-align against the consensus
+    (`summary_stats[sample_name, "*"]`). This function combines both entries into one
+    row containing all the relevant information for the summary table.
+    """
+    # initialise results dataframe with zeros
+    no_ref_summary_stats = pd.DataFrame(
+        0,
+        index=summary_stats.index.unique("sample"),
+        columns=[
+            "reads",
+            "unmapped",
+            "bases",
+            "median_read_length",
+            "mean_cov",
+            "mean_acc",
+        ],
+    )
+    # group by sample and aggregate the stats
+    for sample, df in summary_stats.groupby("sample"):
+        no_ref_summary_stats.loc[sample, ["reads", "bases"]] = df[
+            ["reads", "bases"]
+        ].sum()
+        try:
+            no_ref_summary_stats.loc[sample, "unmapped"] = df.loc[
+                (sample, "*"), "reads"
+            ]
+        except KeyError:
+            no_ref_summary_stats.loc[sample, "unmapped"] = 0
+        # for median read length we have a look at the whole bamstats DataFrame
+        # belonging to that sample
+        (dataset,) = [x for x in datasets if x.sample_alias == sample]
+        no_ref_summary_stats.loc[sample, "median_read_length"] = dataset.bamstats[
+            "read_length"
+        ].median()
+        # multiply the mean cov + acc. per sample--amplicon combination by the number of
+        # reads for that combo and divide by total number of reads for this amplicon to
+        # get the overall per-amplicon average
+        no_ref_summary_stats.loc[sample, ["mean_cov", "mean_acc"]] = df.loc[
+            (sample, sample), ["mean_cov", "mean_acc"]
+        ]
+    no_ref_summary_stats.fillna(0, inplace=True)
+    return format_stats_table(no_ref_summary_stats)

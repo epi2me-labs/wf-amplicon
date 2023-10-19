@@ -109,6 +109,9 @@ def main(args):
 
 def populate_report(report, metadata, datasets, ref_fasta):
     """Fill the report with content."""
+    # put whether we got a ref file into a variable
+    ref_mode = ref_fasta is not None
+    analysis_type_str = "Variant calling" if ref_mode else "Consensus generation"
     samples = [d.sample_alias for d in datasets]
     # check if any samples are missing any of the required inputs and filter them out
     # (we will mention them in the report below); this could only happen if there were
@@ -116,9 +119,10 @@ def populate_report(report, metadata, datasets, ref_fasta):
     bad_datasets = [d for d in datasets if not d.all_inputs_valid]
     datasets = [d for d in datasets if d.all_inputs_valid]
     ref_seqs = []
-    with pysam.FastxFile(ref_fasta) as f:
-        for entry in f:
-            ref_seqs.append(entry.name)
+    if ref_mode:
+        with pysam.FastxFile(ref_fasta) as f:
+            for entry in f:
+                ref_seqs.append(entry.name)
 
     # in case there are no "good" datasets, print a short notice to the report and exit
     # early
@@ -135,17 +139,14 @@ def populate_report(report, metadata, datasets, ref_fasta):
             # we got invalid data for all samples --> warn user and create truncated
             # report
             html_tags.p(
-                """
-                The following samples contained insufficient high quality data to be
-                analysed:
-                """,
-                html_tags.ul([html_tags.li(s) for s in samples]),
-                """
+                f"""{analysis_type_str} failed for all samples.
                 Therefore, only a limited report is available. Consider relaxing the
                 filtering criteria (e.g. using a lower value for
                 """,
                 html_tags.kbd("--min_read_qual"),
-                ").",
+                """) as this is sometimes caused by filtering out all reads from the
+                input data.
+                """,
             )
         # show the pre-processing stats and omit all other sections
         preprocessing_section(report, bad_datasets)
@@ -153,18 +154,36 @@ def populate_report(report, metadata, datasets, ref_fasta):
 
     # intro and "at a glance" stats
     with report.add_section("Introduction", "Intro."):
-        html_tags.p(
-            """
-            This report contains tables and plots to help interpret the results of the
-            wf-amplicon workflow. The individual sections of the report summarize the
-            outcomes of the different steps of the workflow (read filtering, mapping
-            against the reference file containing the amplicon sequences, variant
-            calling).
-            """
+        intro_str = (
+            "This report contains tables and plots to help interpret the results "
+            "of wf-amplicon. The workflow was run in"
         )
+        if not ref_mode:
+            # we're in no-ref mode
+            html_tags.p(
+                intro_str,
+                html_tags.b("no-reference mode"),
+                """. The individual sections of the report summarize the outcomes of the
+                different steps of the workflow (read filtering, consensus generation,
+                re-mapping against the consensus for depth of coverage calculation).
+                """,
+            )
+        else:
+            # we're in ref mode
+            html_tags.p(
+                intro_str,
+                html_tags.b("reference mode"),
+                """. The individual sections of the report summarize the
+                outcomes of the different steps of the workflow (read filtering, mapping
+                against the reference file containing the amplicon sequences, variant
+                calling).
+                """,
+            )
         html_tags.p("The input data contained:")
         # brief summary of how many samples / refs there were
         for name, items in zip(["sample", "amplicon"], [samples, ref_seqs]):
+            if name == "amplicon" and not ref_mode:
+                continue
             if len(items) > 1:
                 name += "s"
             items_str = ", ".join(items[:7]) + (", ..." if len(items) > 7 else "")
@@ -177,8 +196,8 @@ def populate_report(report, metadata, datasets, ref_fasta):
         if bad_datasets:
             dom_util.raw(
                 f"""
-                <b>No valid results were found for the following sample(s) (and these
-                will be omitted from the rest of the report):</b><br>
+                <b>Warning: {analysis_type_str} failed for the following sample(s) (and
+                these will be omitted from the rest of the report):</b><br>
                 {", ".join([d.sample_alias for d in bad_datasets])}<br><br>
                 """
             )
@@ -186,26 +205,40 @@ def populate_report(report, metadata, datasets, ref_fasta):
         html_tags.p(
             """
             Key results for the individual samples are shown below. You can use the
-            dropdown menu to select individual samples.
+            dropdown menu to visualize the results for a different sample.
             """
         )
         # "at a glance" stats in cards (with one dropdown tab per sample)
         tabs = Tabs()
         with tabs.add_dropdown_menu():
             for d in datasets:
-                basic_summary = d.get_basic_summary_stats()
+                basic_summary = d.get_basic_summary_stats(ref_mode)
                 with tabs.add_dropdown_tab(d.sample_alias):
-                    Stats(
-                        columns=3,
-                        items=[
-                            (f'{int(basic_summary["reads"]):,d}', "Reads"),
-                            (f'{int(basic_summary["bases"]):,d}', "Bases"),
-                            (basic_summary["mean_length"].round(1), "Mean length"),
-                            (basic_summary["mean_quality"].round(1), "Mean quality"),
+                    # add values + titles of cards for stats reported in either case
+                    # (no-ref mode and with reference) first
+                    stats_card_items = [
+                        (f'{basic_summary["reads"]:,g}', "Reads"),
+                        (f'{basic_summary["bases"]:,g}', "Bases"),
+                        (basic_summary["mean_length"].round(1), "Mean length"),
+                        (basic_summary["mean_quality"].round(1), "Mean quality"),
+                    ]
+                    if not ref_mode:
+                        # add the no-ref-only cards
+                        stats_card_items += [
+                            (f'{basic_summary["unmapped_reads"]:,g}', "Unmapped reads"),
                             (
-                                f'{basic_summary["amplicons"]:g} / {len(ref_seqs)}',
-                                "Amplicons detected",
+                                f'{basic_summary["consensus_length"]:,g}',
+                                "Consensus length",
                             ),
+                        ]
+                    else:
+                        n_amplicons_stats_str = (
+                            f'{basic_summary["amplicons"]:g} / {len(ref_seqs)}'
+                        )
+                        n_snps_stats_str = f'{basic_summary["snps"]:g}'
+                        n_indels_stats_str = f'{basic_summary["indels"]:g}'
+                        stats_card_items += [
+                            (n_amplicons_stats_str, "Amplicons detected"),
                             (
                                 basic_summary["overall_mean_depth"].round(1),
                                 "Mean coverage across all amplicons",
@@ -214,9 +247,12 @@ def populate_report(report, metadata, datasets, ref_fasta):
                                 basic_summary["min_mean_depth"].round(1),
                                 "Smallest mean coverage for any amplicon",
                             ),
-                            (f'{int(basic_summary["snps"])}', "SNVs"),
-                            (f'{int(basic_summary["indels"])}', "Indels"),
-                        ],
+                            (n_snps_stats_str, "SNVs"),
+                            (n_indels_stats_str, "Indels"),
+                        ]
+                    Stats(
+                        columns=3,
+                        items=stats_card_items,
                     )
 
     # show preprocessing stats
@@ -225,54 +261,72 @@ def populate_report(report, metadata, datasets, ref_fasta):
     # summarize bamstats results of all samples for the following report sections
     bamstats_summary = util.summarize_bamstats(datasets)
 
-    # create summary table with one row per sample
-    per_sample_summary_table = util.format_per_sample_summary_table(
-        bamstats_summary, datasets
-    )
-    # add sample meta data
-    per_sample_summary_table = (
-        pd.concat((metadata, per_sample_summary_table), axis=1)
-        .fillna("-")
-        .rename(columns=str.capitalize)
-    )
-    per_sample_summary_table.index.name = "Sample alias"
-
-    # summary table with one row per amplicon
-    per_amplicon_summary_table = util.format_per_amplicon_summary_table(
-        bamstats_summary, datasets
-    )
-
-    # section for alignment stats and detected variants summary
+    # section for alignment stats and (if in reference mode) detected variants summary
     with report.add_section("Summary", "Summary"):
-        html_tags.p(
-            """
-            The two tables below (one per tab) briefly summarize the main results of
-            mapping the reads to the provided amplicon references and subsequent variant
-            calling.
-            """
-        )
-        tabs = Tabs()
-        with tabs.add_tab("Per-sample summary"):
-            DataTable.from_pandas(per_sample_summary_table)
-        with tabs.add_tab("Per-amplicon summary"):
-            DataTable.from_pandas(per_amplicon_summary_table)
-
-        html_tags.p(
-            dom_util.raw(
+        if not ref_mode:
+            # only show re-alignment stats: make a single table with two rows per
+            # sample; one with stats of successfully re-aligned reads and one with stats
+            # of unaligned reads
+            html_tags.p(
                 """
-                The following table breaks the results down further (one row per
-                sample&ndash;amplicon combination).
+                The table below summarizes the main results of re-mapping the reads of
+                each barcode against the generated consensus.
                 """
             )
-        )
-        with dom_util.container() as c:
-            summary_table = DataTable.from_pandas(
-                util.format_stats_table(bamstats_summary.fillna(0)).reset_index(),
-                use_index=False,
-            )
-        c.clear()
-        dom_util.raw(str(summary_table))
+            with dom_util.container() as c:
+                no_ref_summary_table = util.format_no_ref_summary_table(
+                    bamstats_summary, datasets
+                )
+            c.clear()
+            DataTable.from_pandas(no_ref_summary_table)
+        else:
+            with dom_util.container() as c:
+                # create summary table with one row per sample
+                per_sample_summary_table = util.format_per_sample_summary_table(
+                    bamstats_summary, datasets
+                )
+                # add sample meta data
+                per_sample_summary_table = (
+                    pd.concat((metadata, per_sample_summary_table), axis=1)
+                    .fillna("-")
+                    .rename(columns=str.capitalize)
+                )
+                per_sample_summary_table.index.name = "Sample alias"
 
+                # summary table with one row per amplicon
+                per_amplicon_summary_table = util.format_per_amplicon_summary_table(
+                    bamstats_summary, datasets
+                )
+            c.clear()
+
+            html_tags.p(
+                """
+                The two tables below (one per tab) briefly summarize the main results of
+                mapping the reads to the provided amplicon references and subsequent
+                variant calling.
+                """
+            )
+            tabs = Tabs()
+            with tabs.add_tab("Per-sample summary"):
+                DataTable.from_pandas(per_sample_summary_table)
+            with tabs.add_tab("Per-amplicon summary"):
+                DataTable.from_pandas(per_amplicon_summary_table)
+
+            html_tags.p(
+                dom_util.raw(
+                    """
+                    The following table breaks the results down further (one
+                    sample&ndash;amplicon combination per row).
+                    """
+                )
+            )
+            with dom_util.container() as c:
+                summary_table = DataTable.from_pandas(
+                    util.format_stats_table(bamstats_summary.fillna(0)).reset_index(),
+                    use_index=False,
+                )
+            c.clear()
+            dom_util.raw(str(summary_table))
     # depth coverage plots
     with report.add_section("Depth of coverage", "Depth"):
         html_tags.p(
@@ -295,6 +349,12 @@ def populate_report(report, metadata, datasets, ref_fasta):
                 ]
             )
             for amplicon, depth_df in per_amplicon_depths.groupby("ref"):
+                # drop samples with zero depth along the whole amplicon
+                total_depths = depth_df.groupby('sample')['depth'].sum()
+                samples_with_nonzero_depth = list(total_depths.index[total_depths > 0])
+                if not samples_with_nonzero_depth:
+                    continue
+                depth_df = depth_df.query('sample.isin(@samples_with_nonzero_depth)')
                 with tabs.add_dropdown_tab(amplicon):
                     plt = ezc.lineplot(
                         data=depth_df.round(2),
@@ -311,11 +371,13 @@ def populate_report(report, metadata, datasets, ref_fasta):
                         s.showSymbol = False
                     EZChart(plt, "epi2melabs")
 
-    # variant tables
+    # add variant tables (skip if there were no VCFs)
+    if not ref_mode:
+        return
     with report.add_section("Variants", "Variants"):
         html_tags.p(
             "Haploid variant calling was performed with Medaka. Variants with low ",
-            "depth (i.. smaller than ",
+            "depth (i.e. smaller than ",
             html_tags.kbd("--min_coverage"),
             ') are shown under the "Low depth" tab.',
         )

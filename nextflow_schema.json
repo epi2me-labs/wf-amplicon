@@ -36,8 +36,7 @@
                 }
             },
             "required": [
-                "fastq",
-                "reference"
+                "fastq"
             ]
         },
         "samples": {
@@ -86,6 +85,12 @@
                     "title": "Downsampling size",
                     "description": "Downsample to this number of reads per sample.",
                     "help_text": "Downsampling is performed after filtering. Set to 0 to disable downsampling."
+                },
+                "min_n_reads": {
+                    "type": "number",
+                    "default": 40,
+                    "title": "Minimum number of reads",
+                    "description": "Samples / barcodes with fewer reads will not be processed."
                 }
             }
         },
@@ -179,6 +184,14 @@
                     "default": 75,
                     "description": "Downsample each amplicon to this per-strand depth before running Medaka.",
                     "help_text": "Medaka performs best with even strand coverage and depths between 80X and 400X. To avoid too high coverage, the workflow downsamples the reads for each amplicon to this per-strand depth before running Medaka. Changing this value is discouraged as it might cause decreased performance."
+                },
+                "spoa_minimum_relative_coverage": {
+                    "type": "number",
+                    "default": 0.15,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum coverage (relative to the number of reads per sample after filtering) when constructing the consensus with SPOA.",
+                    "help_text": "Needs to be a number between 0.0 and 1.0. The result of multiplying this number with the number of reads for the corresponding sample (after filtering) is passed on to SPOA's `--min-coverage` option."
                 }
             }
         },
@@ -260,7 +273,7 @@
         }
     },
     "docs": {
-        "intro": "## Introduction\n\nThis [Nextflow](https://www.nextflow.io/) workflow provides a simple way to\nanalyse Oxford Nanopore reads generated from amplicons.\n\nIt requires the raw reads and a reference FASTA file containing one sequence per\namplicon. After filtering (based on read length and quality) and trimming,\nreads are aligned to the reference using\n[minimap2](https://github.com/lh3/minimap2). Variants are then called with\n[Medaka](https://github.com/nanoporetech/medaka). Results include an interactive\nHTML report and VCF files containing the called variants.\n\nAs mentioned above, the reference FASTA file needs to contain one sequence per\namplicon for now. An option to provide a whole-genome reference file and pairs\nof primers might be added in the future if requested by users.\n",
+        "intro": "## Introduction\n\nThis [Nextflow](https://www.nextflow.io/) workflow provides a simple way to\nanalyse Oxford Nanopore reads generated from amplicons.\n\nThe workflow requires raw reads in FASTQ format and can be run in two modes:\n* With a reference: After initial filtering (based on read length and quality)\n  and adapter trimming, [minimap2](https://github.com/lh3/minimap2) is used to\n  align the reads to a reference FASTA file (please note that the reference\n  should only contain the expected sequences of the individual amplicons).\n  Variants are then called with\n  [Medaka](https://github.com/nanoporetech/medaka).\n* Without a reference: Like for the \"reference mode\", reads are first filtered\n  and trimmed. Then, `medaka smolecule` is used to generate the consensus of the\n  reads of each sample _de novo_. Reads are re-aligned against the consensus to\n  produce coverage plots for the report.\n\nThe results of the workflow include an interactive HTML report, FASTA files with\nthe consensus sequences of the amplicons, BAM files with the alignments, and VCF\nfiles containing the variants (if run in \"reference mode\").\n",
         "links": "\n## Useful links\n\n- [Nextflow](https://www.nextflow.io/)\n- [Docker](https://www.docker.com/products/docker-desktop)\n- [Singularity](https://docs.sylabs.io/guides/latest/user-guide/)\n- [minimap2](https://github.com/lh3/minimap2)\n- [Medaka](https://github.com/nanoporetech/medaka)\n- [Porechop](https://github.com/rrwick/Porechop)\n"
     }
 }
