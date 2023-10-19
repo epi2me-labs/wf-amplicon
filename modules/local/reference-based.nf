@@ -3,7 +3,7 @@ include {
     bamstats;
     mosdepth;
     concatMosdepthResultFiles;
-    lookupMedakaVariantModel
+    lookupMedakaModel
 } from "./common"
 
 
@@ -119,6 +119,7 @@ process mergeBAMs {
 workflow pipeline {
     take:
         // reads have already been downsampled and trimmed
+        // expects shape: `[meta, reads]`
         ch_reads
         ref
     main:
@@ -133,7 +134,9 @@ workflow pipeline {
         } else {
             Path lookup_table = file(
                 "${projectDir}/data/medaka_models.tsv", checkIfExists: true)
-            medaka_model = lookupMedakaVariantModel(lookup_table, params.basecaller_cfg)
+            medaka_model = lookupMedakaModel(
+                lookup_table, params.basecaller_cfg, "medaka_variant"
+            )
         }
 
         // align to reference
