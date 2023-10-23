@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+### Fixed
+- Emitting an empty consensus FASTA file when consensus generation failed in certain situations. Instead, no file is emitted.
+
 ## [v0.4.0]
 ### Added
 - Running the workflow without a reference will switch the workflow to "no-reference mode" and will use SPOA to construct a consensus sequence _de novo_.

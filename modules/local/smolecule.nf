@@ -40,11 +40,11 @@ process medakaSmolecule {
         --threads $task.cpus \
         --spoa_min_coverage $spoa_min_cov
 
-    # If `smolecule` produces more than one sequence, fail the process with exit code
+    # If `smolecule` doesn't produce a single sequence, fail the process with exit code
     # `65` (it will shuffle the reads upon retry). If already in the third attempt, exit
     # with code `0` (no retry and no output).
-    if [[ \$(grep -c '^>' out/consensus.fasta) -gt 1 ]]; then
-        echo "QUITTING: More than one sequence in 'out/consensus.fasta'."
+    if [[ \$(grep -c '^>' out/consensus.fasta) -ne 1 ]]; then
+        echo "QUITTING: Found zero or more than one sequences in 'out/consensus.fasta'."
         [[ $task.attempt -ge 3 ]] && exit_code=0 || exit_code=65
         exit \$exit_code
     fi
