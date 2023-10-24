@@ -379,7 +379,9 @@ def populate_report(report, metadata, datasets, ref_fasta):
             "Haploid variant calling was performed with Medaka. Variants with low ",
             "depth (i.e. smaller than ",
             html_tags.kbd("--min_coverage"),
-            ') are shown under the "Low depth" tab.',
+            ') are shown under the "Low depth" tab. The numbers in the ',
+            '"depth" column relate to the sequencing depth used to perform '
+            "variant calling."
         )
         # combine all variants into a single dataframe with `[sample, amplicon]` as
         # multi-level index

@@ -167,7 +167,7 @@ workflow pipeline {
 
         // get the variants
         medakaVariant(
-            ch_medaka_consensus_probs | join(alignReads.out),
+            ch_medaka_consensus_probs | join(downsampleBAMforMedaka.out),
             ref,
             params.min_coverage
         )

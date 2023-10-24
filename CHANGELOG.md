@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased]
 ### Fixed
 - Emitting an empty consensus FASTA file when consensus generation failed in certain situations. Instead, no file is emitted.
+- Now uses the downsampled BAM for `medaka annotate`.
+
 ### Removed
 - Misleading allelic balance statistic in report.
 
