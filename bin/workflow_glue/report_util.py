@@ -53,9 +53,7 @@ class ReportDataSet:
         # if there is a VCF, read the variants
         vcf_path = data_dir / "medaka.annotated.vcf.gz"
         self.variants = pd.DataFrame(
-            # 'AB' (allelic balance) is the fraction of reads supporting the ALT
-            # allele
-            columns=["amp", "pos", "ref", "alt", "type", "filter", "DP", "AB"]
+            columns=["amp", "pos", "ref", "alt", "type", "filter", "DP"]
         ).set_index(["amp", "pos"])
         if vcf_path.exists():
             # check that the VCF only contains a single sample
@@ -77,15 +75,6 @@ class ReportDataSet:
                     entry.alleles_variant_types[1],
                     entry.filter[0].name,
                     entry.info["DP"],
-                    # divide the number of spanning reads supporting the ALT allele by
-                    # the number of all reads (`SR` contains a tuple with `(ref fwd, ref
-                    # rev, alt1 fwd, alt1 rev`)
-                    round(
-                        (entry.info["SR"][2] + entry.info["SR"][3])
-                        * 100
-                        / entry.info["DP"],
-                        1,
-                    ),
                 ]
 
     def __repr__(self):

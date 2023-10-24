@@ -391,7 +391,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
                         for d in datasets
                     )
                 )
-                .astype({"pos": int, "DP": int, "AB": float})
+                .astype({"pos": int, "DP": int})
                 .rename(
                     columns={
                         "amp": "amplicon",
@@ -399,16 +399,12 @@ def populate_report(report, metadata, datasets, ref_fasta):
                         "ref": "ref. allele",
                         "alt": "alt. allele",
                         "DP": "Depth",
-                        "AB": "Allelic balance",
                     }
                 )
                 .rename(columns=lambda x: x.capitalize())
             )
             .sort_values(["Sample", "Amplicon", "Position"])
             .set_index(["Sample", "Amplicon"])
-        )
-        comb_variants["Allelic balance"] = (
-            comb_variants["Allelic balance"].astype(str) + "%"
         )
         # one tab + table for the variants that passed the depth filter and one for the
         # others
