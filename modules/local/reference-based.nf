@@ -63,8 +63,12 @@ process medakaVariant {
         path "reference.fasta"
         val min_coverage
     output:
-        tuple val(meta), path("medaka.annotated.vcf.gz"), emit: filtered
-        tuple val(meta), path("medaka.annotated.unfiltered.vcf"), emit: unfiltered
+        tuple(
+            val(meta),
+            path("medaka.annotated.vcf.gz"),
+            path("medaka.annotated.vcf.gz.csi"),
+            emit: filtered
+        )
         tuple val(meta), path("medaka.consensus.fasta"), emit: consensus
     """
     medaka variant reference.fasta consensus_probs*.hdf medaka.vcf
@@ -90,7 +94,7 @@ process mergeVCFs {
     label "medaka"
     cpus 1
     input: path "VCFs/file*.vcf.gz"
-    output: path "combined.vcf.gz"
+    output: tuple path("combined.vcf.gz"), path("combined.vcf.gz.csi")
     script:
     """
     (
@@ -98,6 +102,7 @@ process mergeVCFs {
         ls | xargs -n1 bcftools index
     )
     bcftools merge VCFs/file*.vcf.gz -Oz -o combined.vcf.gz
+    bcftools index combined.vcf.gz
     """
 }
 
@@ -107,10 +112,11 @@ process mergeBAMs {
     input:
         path "BAMs/file*.bam"
         path "indices/file*.bam.bai"
-    output: path "combined.bam"
+    output: tuple path("combined.bam"), path("combined.bam.bai")
     script:
     """
     samtools merge BAMs/* indices/* -pXo combined.bam
+    samtools index combined.bam
     """
 }
 
@@ -187,7 +193,7 @@ workflow pipeline {
         combined_bams = null
         if (params.combine_results) {
             combined_vcfs = mergeVCFs(
-                medakaVariant.out.filtered.collect { meta, vcf -> vcf }
+                medakaVariant.out.filtered.collect { meta, vcf, idx -> vcf }
             )
             combined_bams = mergeBAMs(
                 alignReads.out.collect { meta, bam, bai -> bam },

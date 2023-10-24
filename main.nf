@@ -244,7 +244,8 @@ workflow pipeline {
             | mix(
                 variantCallingPipeline.out.sanitized_ref | map { [it, null] },
                 variantCallingPipeline.out.variants
-                | map { meta, vcf -> [vcf, "$meta.alias/variants"] },
+                | map { meta, vcf, idx -> [[vcf, idx], "$meta.alias/variants"] }
+                | transpose,
                 variantCallingPipeline.out.mapped
                 | map { meta, bam, bai -> [[bam, bai], "$meta.alias/alignments"] }
                 | transpose,
@@ -255,8 +256,10 @@ workflow pipeline {
             if (params.combine_results) {
                 ch_to_publish = ch_to_publish
                 | mix(
-                    variantCallingPipeline.out.combined_vcfs | map { [it, null] },
-                    variantCallingPipeline.out.combined_bams | map { [it, null] },
+                    variantCallingPipeline.out.combined_vcfs | map { [it, null] }
+                    | transpose,
+                    variantCallingPipeline.out.combined_bams | map { [it, null] }
+                    | transpose,
                 )
             }
         } else {
