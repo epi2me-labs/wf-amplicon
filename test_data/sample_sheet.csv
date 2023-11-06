@@ -1,0 +1,5 @@
+barcode,alias,type,ref
+barcode01,sample1,test_sample,katG::NC_000962.3:2154725-2155670 rpoB::NC_000962.3:760285-761376
+barcode02,sample2,test_sample,
+barcode03,sample3,positive_control,katG::NC_000962.3:2154725-2155670
+barcode04,sample4,test_sample,rpoB::NC_000962.3:760285-761376

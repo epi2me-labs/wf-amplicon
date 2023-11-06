@@ -165,17 +165,10 @@ def summarize_bamstats(datasets):
     The resulting DataFrame contains summed / averaged values for each sample--amplicon
     combination.
     """
-    samples = sorted([d.sample_alias for d in datasets])
-    amplicons = sorted(
-        set([amp for d in datasets for amp in d.bamstats_flagstat.index]) - set("*")
-    )
-
     summary_stats = pd.DataFrame(
-        0,
-        index=pd.MultiIndex.from_product(
-            [samples, amplicons], names=["sample", "amplicon"]
-        ),
         columns=[
+            "sample",
+            "amplicon",
             "reads",
             "bases",
             "median_read_length",
@@ -184,10 +177,15 @@ def summarize_bamstats(datasets):
             "variants",
             "indels",
         ],
-    )
+    ).set_index(["sample", "amplicon"])
 
     for d in datasets:
-        for amplicon, df in d.bamstats.groupby("ref"):
+        # order refs so that the row for unmapped is at the end for each sample
+        refs = d.bamstats['ref'].unique()
+        if '*' in refs:
+            refs = [ref for ref in refs if ref != "*"] + ["*"]
+        for amplicon in refs:
+            df = d.bamstats.query('ref == @amplicon')
             n_reads = df.shape[0]
             n_bases = df["read_length"].sum()
             med_read_length = df["read_length"].median()

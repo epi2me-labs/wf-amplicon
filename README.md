@@ -73,7 +73,32 @@ nextflow run epi2me-labs/wf-amplicon \
 `$input` can be a single FASTQ file, a directory containing FASTQ files, or a
 directory containing barcoded sub-directories which in turn contain FASTQ files.
 A sample sheet can be included with `--sample_sheet` and a sample name for an
-individual sample with `--sample`.
+individual sample with `--sample`. If a sample sheet is provided, it needs to
+contain at least these three columns:
+
+- `barcode`: names of the sub-directories with the FASTQ files of the different
+  samples
+- `alias`: sample names
+- `type`: sample types (needs to be one of `test_sample`, `positive_control`,
+  `negative_control`, `no_template_control`)
+
+Additionally, it can also contain a column named `ref`, which can be used to
+specify one or more sequences in the reference FASTA file for the individual
+samples. If a sample should be aligned against multiple reference sequences,
+their IDs can be included as a space-delimited list. If a specific sample should
+be aligned against all references, you can leave the corresponding cell in the
+`ref` column blank. As an example, the following sample sheet tells the workflow
+that the first two barcodes (`sample1` and `sample2`) are expected to contain
+reads from both amplicons in the reference, whereas the other two samples only
+contain one amplicon each.
+
+```
+barcode,alias,type,ref
+barcode01,sample1,test_sample,katG::NC_000962.3:2154725-2155670 rpoB::NC_000962.3:760285-761376
+barcode02,sample2,test_sample,
+barcode03,sample3,positive_control,katG::NC_000962.3:2154725-2155670
+barcode04,sample4,test_sample,rpoB::NC_000962.3:760285-761376
+```
 
 Relevant options for filtering of raw reads are
 
@@ -128,7 +153,6 @@ comes with the caveat that deletions at either end of the amplicon are not going
 to be reflected in the consensus (i.e. it will still contain the deleted
 regions). For this reason we suggest to always have a look at the coverage plots
 in the generated HTML report.
-
 
 ### Running without a reference
 

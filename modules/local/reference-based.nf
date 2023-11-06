@@ -7,6 +7,34 @@ include {
 } from "./common"
 
 
+process sanitizeRefFile {
+    // some tools don't like `:` or `*` in FASTA header lines lines (e.g. medaka will
+    // try to parse the sequence ID as region string if it contains `:`) --> replace
+    // them (and whitespace) with underscores
+    label "wfamplicon"
+    cpus 1
+    input: path "reference.fasta"
+    output: path "reference_sanitized_seqIDs.fasta"
+    script:
+    """
+    sed '/^>/s/:\\|\\*\\| /_/g' reference.fasta > reference_sanitized_seqIDs.fasta
+    """
+}
+
+process subsetRefFile {
+    label "wfamplicon"
+    cpus 1
+    input: tuple val(metas), path("reference.fasta"), val(target_seqs)
+    output: tuple val(metas), path("reference_subset.fasta"), val(target_seqs)
+    script:
+    // need to manually join with " " here as this will be an `ArrayList` and not a
+    // `BlankSeparatedList`
+    String refs_str = target_seqs.join(" ")
+    """
+    samtools faidx reference.fasta $refs_str > reference_subset.fasta
+    """
+}
+
 process downsampleBAMforMedaka {
     label "wfamplicon"
     cpus 1
@@ -22,19 +50,6 @@ process downsampleBAMforMedaka {
 
     samtools view input.bam -N downsampled.read_IDs -o downsampled.bam
     samtools index downsampled.bam
-    """
-}
-
-process sanitizeRefFile {
-    // some tools can't deal with `:` or `*` in ref FASTA ID lines --> replace them (and
-    // whitespace) with underscores
-    label "wfamplicon"
-    cpus 1
-    input: path "reference.fasta"
-    output: path "reference_sanitized_seqIDs.fasta"
-    script:
-    """
-    sed '/^>/s/:\\|\\*\\| /_/g' reference.fasta > reference_sanitized_seqIDs.fasta
     """
 }
 
@@ -59,8 +74,8 @@ process medakaVariant {
         tuple val(meta),
             path("consensus_probs*.hdf"),
             path("input.bam"),
-            path("input.bam.bai")
-        path "reference.fasta"
+            path("input.bam.bai"),
+            path("reference.fasta")
         val min_coverage
     output:
         tuple(
@@ -70,6 +85,7 @@ process medakaVariant {
             emit: filtered
         )
         tuple val(meta), path("medaka.consensus.fasta"), emit: consensus
+    script:
     """
     medaka variant reference.fasta consensus_probs*.hdf medaka.vcf
     medaka tools annotate --dpsp medaka.vcf reference.fasta input.bam \
@@ -129,9 +145,6 @@ workflow pipeline {
         ch_reads
         ref
     main:
-        // sanitize seq IDs in ref FASTA
-        def ref = sanitizeRefFile(ref)
-
         // get medaka model (look up or override)
         def medaka_model
         if (params.medaka_model) {
@@ -145,9 +158,62 @@ workflow pipeline {
             )
         }
 
-        // align to reference
+        // some tools don't like `:` or `*` in FASTA header lines lines (e.g. medaka
+        // will try to parse the sequence ID as region string if it contains `:`) and we
+        // need to sanitize the ref IDs
+        san_ref = sanitizeRefFile(ref)
+
+        // create a map from refID to sanitized refID; we'll use this to translate
+        // target ref IDs from the sample sheet to sanitized ref IDs so that we can
+        // subset the sanitized ref file
+        ref_id_map = Channel.empty()
+        | concat(
+            Channel.of(ref).splitFasta(record: [id: true]).map{ it.id }.collect(),
+            san_ref.splitFasta(record: [id: true]).map{ it.id }.collect()
+        )
+        | toList
+        | map { it.transpose().collectEntries() as LinkedHashMap }
+
+        // We don't want to write out sanitized FASTA files more often than we have to.
+        // We thus group the samples by target ref IDs and subset only once per group
+        ch_branched = ch_reads
+        | map { meta, reads -> [meta["ref"]?.split() as Set, meta] }
+        | groupTuple
+        | combine(san_ref)
+        | combine(ref_id_map)
+        | branch { refs, metas, san_ref, ref_id_map ->
+            with_target_refs: refs as boolean
+            no_target_refs: true
+        }
+
+        // For samples with target ref IDs, subset the sanitized ref file and add the
+        // subset of sanitized ref IDs to the channel. For samples without target ref
+        // IDs, add the full sanitized ref file and all sanitized ref IDs.
+        ch_sanitized_refs_and_ids = ch_branched.with_target_refs
+        | map { refs, metas, san_ref, ref_id_map ->
+            ArrayList ordered_target_ref_ids = ref_id_map.keySet().findAll { it in refs }
+            ArrayList sanitized_target_ref_ids = \
+                ref_id_map.subMap(ordered_target_ref_ids).values()
+            [metas, san_ref, sanitized_target_ref_ids]
+        }
+        | subsetRefFile
+        | mix(
+            ch_branched.no_target_refs | map { _, metas, san_ref, ref_id_map ->
+                [metas, san_ref, ref_id_map.values() as ArrayList]
+            }
+        )
+        // transpose the channel for shape `[meta, sanitized ref, sanitized ref IDs]`
+        | transpose(by: 0)
+
+        // put the sanitized + subsetted refs and the ref IDs into separate channels
+        ch_sanitized_refs = ch_sanitized_refs_and_ids
+        | map { meta, ref, ids -> [meta, ref] }
+        ch_sanitized_ids = ch_sanitized_refs_and_ids
+        | map { meta, ref, ids -> [meta, ids] }
+
+        // align the reads
         ch_reads
-        | combine(ref)
+        | join(ch_sanitized_refs)
         | alignReads
 
         // get mapping stats for report and pre-Medaka downsampling
@@ -161,26 +227,25 @@ workflow pipeline {
         }
         | downsampleBAMforMedaka
 
-        // get the seq IDs of the amplicons from the ref file
-        def ch_amplicon_seqIDs = ref | splitFasta(record: [id: true]) | map { it.id }
-
         // run medaka consensus (the process will run once for each sample--amplicon
         // combination)
-        def ch_medaka_consensus_probs = medakaConsensus(
-            downsampleBAMforMedaka.out | combine(ch_amplicon_seqIDs),
+        ch_medaka_consensus_probs = medakaConsensus(
+            // join with and transpose on the list of sanitized IDs for each sample
+            downsampleBAMforMedaka.out | join(ch_sanitized_ids) | transpose(by: 3),
             medaka_model
         ) | groupTuple
 
         // get the variants
         medakaVariant(
-            ch_medaka_consensus_probs | join(downsampleBAMforMedaka.out),
-            ref,
+            ch_medaka_consensus_probs
+            | join(downsampleBAMforMedaka.out)
+            | join(ch_sanitized_refs),
             params.min_coverage
         )
 
         // run mosdepth on each sample--amplicon combination
         mosdepth(
-            alignReads.out | combine(ch_amplicon_seqIDs),
+            alignReads.out | join(ch_sanitized_ids) | transpose(by: 3),
             params.number_depth_windows
         )
         // concat the depth files for each sample
@@ -201,7 +266,7 @@ workflow pipeline {
             )
         }
     emit:
-        sanitized_ref = ref
+        sanitized_ref = san_ref
         mapped = alignReads.out
         mapping_stats = bamstats.out
         depth = concatMosdepthResultFiles.out
