@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Misleading allelic balance statistic in report.
 
+### Added
+- Support for specifying reference sequences for individual samples with an extra `"ref"` column in the sample sheet.
+
 ## [v0.4.0]
 ### Added
 - Running the workflow without a reference will switch the workflow to "no-reference mode" and will use SPOA to construct a consensus sequence _de novo_.

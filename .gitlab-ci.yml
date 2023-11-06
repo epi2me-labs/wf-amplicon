@@ -9,6 +9,9 @@ variables:
     --reference test_data/reference.fasta
     --threads 2
     --combine_results
+  AFTER_NEXTFLOW_CMD: |
+    ! grep 'No reads left after pre-processing' .nextflow.log &&
+    ! grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
   CI_FLAVOUR: "new"
 
 docker-run:
@@ -21,7 +24,7 @@ docker-run:
   #   the variables, but it is broken when using long strings! See CW-756
   parallel:
     matrix:
-      - MATRIX_NAME: ["ref", "filter-all", "no-ref"]
+      - MATRIX_NAME: ["ref", "ref-sample_sheet", "filter-all", "no-ref"]
   rules:
     # NOTE As we're overriding the rules block for the included docker-run
     #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
@@ -30,19 +33,23 @@ docker-run:
       when: never
     - if: $MATRIX_NAME == "ref"
       variables:
+        # use default workflow opts defined above
+        NF_PROCESS_FILES: >
+          main.nf
+          modules/local/reference-based.nf
+        NF_IGNORE_PROCESSES: downsampleReads,subsetRefFile
+    - if: $MATRIX_NAME == "ref-sample_sheet"
+      variables:
         NF_WORKFLOW_OPTS: >
           --fastq test_data/fastq
           --reference test_data/reference.fasta
+          --sample_sheet test_data/sample_sheet.csv
           --threads 2
           --reads_downsampling_size 2000
           --combine_results
         NF_PROCESS_FILES: >
           main.nf
           modules/local/reference-based.nf
-        AFTER_NEXTFLOW_CMD: |
-          ! grep 'No reads left after pre-processing' .nextflow.log &&
-          ! grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
-
     - if: $MATRIX_NAME == "filter-all"
       variables:
         NF_WORKFLOW_OPTS: >
@@ -53,7 +60,7 @@ docker-run:
         NF_PROCESS_FILES: >
           main.nf
           modules/local/reference-based.nf
-        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,alignReads,bamstats,concatMosdepthResultFiles,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,mosdepth
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,alignReads,bamstats,concatMosdepthResultFiles,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,mosdepth,subsetRefFile
         AFTER_NEXTFLOW_CMD: |
           grep 'No reads left after pre-processing' .nextflow.log &&
           grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
@@ -61,7 +68,7 @@ docker-run:
     - if: $MATRIX_NAME == "no-ref"
       variables:
         NF_WORKFLOW_OPTS: >
-          --fastq test_data/fastq/barcode03
+          --fastq test_data/fastq/barcode04
         NF_PROCESS_FILES: >
           main.nf
           modules/local/smolecule.nf

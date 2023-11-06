@@ -205,7 +205,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
         html_tags.p(
             """
             Key results for the individual samples are shown below. You can use the
-            dropdown menu to visualize the results for a different sample.
+            dropdown menu to view the results for a different sample.
             """
         )
         # "at a glance" stats in cards (with one dropdown tab per sample)
@@ -232,8 +232,18 @@ def populate_report(report, metadata, datasets, ref_fasta):
                             ),
                         ]
                     else:
+                        # Define the number of amplicons we expect to find. If a `ref`
+                        # column was in the sample sheet, it is the number of ref IDs
+                        # listed there. Otherwise, it is the total number of references.
+                        # Note that the ref column can also contain an empty cell.
+                        try:
+                            n_exp_amps = len(
+                                metadata.loc[d.sample_alias, "ref"].split()
+                            )
+                        except (AttributeError, KeyError):
+                            n_exp_amps = len(ref_seqs)
                         n_amplicons_stats_str = (
-                            f'{basic_summary["amplicons"]:g} / {len(ref_seqs)}'
+                            f'{basic_summary["amplicons"]:g} / {n_exp_amps}'
                         )
                         n_snps_stats_str = f'{basic_summary["snps"]:g}'
                         n_indels_stats_str = f'{basic_summary["indels"]:g}'
@@ -287,7 +297,16 @@ def populate_report(report, metadata, datasets, ref_fasta):
                 )
                 # add sample meta data
                 per_sample_summary_table = (
-                    pd.concat((metadata, per_sample_summary_table), axis=1)
+                    # for this table, drop `ref` column from sample sheet if present
+                    pd.concat(
+                        (
+                            metadata.drop(columns="ref", errors="ignore")
+                            if metadata is not None
+                            else None,
+                            per_sample_summary_table,
+                        ),
+                        axis=1,
+                    )
                     .fillna("-")
                     .rename(columns=str.capitalize)
                 )
@@ -350,11 +369,11 @@ def populate_report(report, metadata, datasets, ref_fasta):
             )
             for amplicon, depth_df in per_amplicon_depths.groupby("ref"):
                 # drop samples with zero depth along the whole amplicon
-                total_depths = depth_df.groupby('sample')['depth'].sum()
+                total_depths = depth_df.groupby("sample")["depth"].sum()
                 samples_with_nonzero_depth = list(total_depths.index[total_depths > 0])
                 if not samples_with_nonzero_depth:
                     continue
-                depth_df = depth_df.query('sample.isin(@samples_with_nonzero_depth)')
+                depth_df = depth_df.query("sample.isin(@samples_with_nonzero_depth)")
                 with tabs.add_dropdown_tab(amplicon):
                     plt = ezc.lineplot(
                         data=depth_df.round(2),
@@ -381,7 +400,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
             html_tags.kbd("--min_coverage"),
             ') are shown under the "Low depth" tab. The numbers in the ',
             '"depth" column relate to the sequencing depth used to perform '
-            "variant calling."
+            "variant calling.",
         )
         # combine all variants into a single dataframe with `[sample, amplicon]` as
         # multi-level index
