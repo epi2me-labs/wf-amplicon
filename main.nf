@@ -39,8 +39,8 @@ process addMedakaToVersionsFile {
     output: path "versions.txt"
     script:
     """
-    medaka --version | tr ' ' ',' >> old_versions.txt
-    mv old_versions.txt versions.txt
+    cp old_versions.txt versions.txt
+    medaka --version | tr ' ' ',' > versions.txt
     """
 }
 
