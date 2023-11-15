@@ -11,20 +11,24 @@ This [Nextflow](https://www.nextflow.io/) workflow provides a simple way to
 analyse Oxford Nanopore reads generated from amplicons.
 
 The workflow requires raw reads in FASTQ format and can be run in two modes:
-* With a reference: After initial filtering (based on read length and quality)
-  and adapter trimming, [minimap2](https://github.com/lh3/minimap2) is used to
-  align the reads to a reference FASTA file (please note that the reference
-  should only contain the expected sequences of the individual amplicons).
-  Variants are then called with
-  [Medaka](https://github.com/nanoporetech/medaka).
-* Without a reference: Like for the "reference mode", reads are first filtered
-  and trimmed. Then, `medaka smolecule` is used to generate the consensus of the
-  reads of each sample _de novo_. Reads are re-aligned against the consensus to
-  produce coverage plots for the report.
+* Variant calling mode: Trigger this mode by passing a reference FASTA file.
+  After initial filtering (based on read length and quality) and adapter
+  trimming, [minimap2](https://github.com/lh3/minimap2) is used to align the
+  reads to the reference (please note that the reference should only contain the
+  expected sequences of the individual amplicons). Variants are then called with
+  [Medaka](https://github.com/nanoporetech/medaka). This mode allows for
+  multiple amplicons per barcode (for details on how to map specific target
+  amplicons to individual samples / barcodes, see below).
+* De-novo consensus mode: This mode is run when no reference file is passed.
+  Like for the "variant calling mode", reads are first filtered and trimmed.
+  Then, a consensus sequence is generated _de novo_ from the reads of each
+  sample. Reads are re-aligned against the draft consensus for polishing with
+  [Medaka](https://github.com/nanoporetech/medaka). Please note that only one
+  amplicon per barcode is supported in de-novo consensus mode.
 
 The results of the workflow include an interactive HTML report, FASTA files with
 the consensus sequences of the amplicons, BAM files with the alignments, and VCF
-files containing the variants (if run in "reference mode").
+files containing the variants (if run in variant calling mode).
 
 
 
@@ -57,9 +61,9 @@ This will show the workflow's command line options.
 ### Usage
 
 This section covers how to use the workflow when providing a reference file with
-the expected sequences of the amplicons. For details on how to run the workflow
-without a reference (i.e. for _de novo_ construction of the amplicon consensus
-sequence), see the relevant section below.
+the expected sequences of the amplicons ("variant calling mode"). For details on
+how to run the workflow without a reference ("de-novo consensus mode"), see the
+relevant section below.
 
 Basic usage is as follows
 
@@ -106,11 +110,18 @@ Relevant options for filtering of raw reads are
 - `--max_read_length`
 - `--min_read_qual`
 
-After filtering and trimming with
-[Porechop](https://github.com/rrwick/Porechop), reads can optionally be
-downsampled. You can control the number of reads to keep per sample with
-`--reads_downsampling_size`. Samples with fewer than `--min_n_reads` are
-ignored.
+After initial filtering, reads can optionally be downsampled
+(`--reads_downsampling_size` controls the number of reads to keep per sample).
+The workflow supports random downsampling as well as selecting reads based on
+read length. Subsetting based on read length tends to work better for de-novo
+consensus generation and is thus set as default (see the section for the de-novo
+consensus mode below for details and for how to disable this). However, it
+should not detriment the performance of the variant-calling mode. The selected
+reads are then trimmed with [Porechop](https://github.com/rrwick/Porechop)
+before being aligned against the reference.
+
+> Note: Samples with fewer reads than `--min_n_reads` after preprocessing are
+> ignored.
 
 After alignment, haploid variants are called with
 [Medaka](https://github.com/nanoporetech/medaka). You can set the minimum
@@ -157,21 +168,47 @@ in the generated HTML report.
 ### Running without a reference
 
 The workflow can also be run without a reference. It will then use
-`medaka smolecule` to construct a consensus sequence for each barcode.
-`smolecule` relies on [SPOA](https://github.com/rvaser/spoa) and the workflow
-takes advantage of the recently added option in SPOA to prune low-coverage nodes
-from the partial order graph. The threshold for this is relative to the number
-of reads per sample (after filtering) and can be modified with
-`--spoa_minimum_relative_coverage` (e.g. set to `0.2` to require a coverage of at least
-20% of reads along the whole consensus).
+[miniasm](https://github.com/lh3/miniasm) or
+[SPOA](https://github.com/rvaser/spoa) to create a draft consensus. `miniasm`
+tends to work better for longer amplicons and `spoa` for shorter amplicons. The
+workflow attempts to create an assembly with `miniasm` first. If this succeeds,
+the draft assembly is polished with [Racon](https://github.com/lbcb-sci/racon) and
+the input reads are re-aligned against it. This is followed by some post-processing
+(trimming low-coverage regions from the ends) and quality control (QC). During QC, the following
+sanity-checks are performed:
 
-[SPOA](https://github.com/rvaser/spoa) works best for LSK data. The performance
-of the consensus generation may be poor for RBK data in some cases, especially
-if no long reads spanning most of the amplicon were found. We therefore
-recommend to only use "no reference mode" for short amplicons (4 kb or shorter).
-To improve robustness on RBK, an assembly-based approach might be implemented in
-the future.
+- The mean coverage of the consensus is above `--minimum_mean_depth` (default: 30X).
+- The fraction of primary alignments for the re-aligned reads is more than
+  `--primary_alignment_threshold` (default: 70%). Large numbers of secondary /
+  supplementary alignments indicate that something might have gone wrong during
+  assembly. If your amplicons contain long repetitive regions, you can lower
+  this number.
 
+If more than one contig from the draft assembly passes these filters, the one
+with the highest coverage is selected.
+
+If assembly generation fails or none of the contigs produced by `miniasm` pass
+QC, `spoa` is tried. Regardless of how the draft consensus was generated
+(`miniasm` or `spoa`), a final polishing step with
+[Medaka](https://github.com/nanoporetech/medaka) is performed.
+
+Note: Since `spoa` tends to produce a better consensus than `miniasm` for short
+amplicons, users can force the workflow to run `spoa` if the assembly created by
+`miniasm` is shorter than `--force_spoa_length_threshold` (even if it passes
+QC).
+
+**Random downsampling vs selecting reads by length:**
+
+Despite the workflow dropping reads containing adapter sequences in the middle
+(with `porechop --discard_middle`), some reads in the input data stemming from
+concatemers or other PCR artifacts might still make it through preprocessing and
+could thus interfere with consensus generation. A simple way to avoid this is to
+drop a small fraction (e.g. 5%) of longest reads. Additionally, `spoa` depends
+on the order of reads in the input and benefits from "seeing" longer reads
+first. Therefore, the following options are used per default
+`--drop_frac_longest_reads 0.05 --take_longest_remaining_reads`. To disable this
+and enforce random downsampling of input reads, use `--drop_frac_longest_reads 0
+--take_longest_remaining_reads false`.
 
 
 
@@ -182,5 +219,7 @@ the future.
 - [Docker](https://www.docker.com/products/docker-desktop)
 - [Singularity](https://docs.sylabs.io/guides/latest/user-guide/)
 - [minimap2](https://github.com/lh3/minimap2)
+- [miniasm](https://github.com/lh3/miniasm)
+- [SPOA](https://github.com/rvaser/spoa)
 - [Medaka](https://github.com/nanoporetech/medaka)
 - [Porechop](https://github.com/rrwick/Porechop)
