@@ -17,9 +17,6 @@ from . import report_util as util  # noqa: ABS101
 
 from .util import get_named_logger, wf_parser  # noqa: ABS101
 
-# number of points in the depth-across-amplicon line plots
-N_DEPTH_WINDOWS = 100
-
 
 def argparser():
     """Argument parser for entrypoint."""
@@ -43,7 +40,7 @@ def argparser():
     parser.add_argument(
         "--reference",
         type=Path,
-        help="FASTA file with reference sequences for the individual amplicon.",
+        help="FASTA file with reference sequences for the individual amplicons.",
     )
     parser.add_argument(
         "--sample-sheet",
@@ -110,8 +107,8 @@ def main(args):
 def populate_report(report, metadata, datasets, ref_fasta):
     """Fill the report with content."""
     # put whether we got a ref file into a variable
-    ref_mode = ref_fasta is not None
-    analysis_type_str = "Variant calling" if ref_mode else "Consensus generation"
+    de_novo = ref_fasta is None
+    analysis_type_str = "De-novo consensus generation" if de_novo else "Variant calling"
     samples = [d.sample_alias for d in datasets]
     # check if any samples are missing any of the required inputs and filter them out
     # (we will mention them in the report below); this could only happen if there were
@@ -119,11 +116,19 @@ def populate_report(report, metadata, datasets, ref_fasta):
     bad_datasets = [d for d in datasets if not d.all_inputs_valid]
     datasets = [d for d in datasets if d.all_inputs_valid]
     ref_seqs = []
-    if ref_mode:
+    if de_novo:
+        # make sure that there was only one amplicon per sample in de-novo mode
+        for d in datasets:
+            if len(d.detected_amplicons) != 1:
+                raise ValueError(
+                    "Found unexpected number of amplicons "
+                    f"in de-novo consensus mode for sample {d.sample_alias}."
+                )
+    else:
+        # in variant calling mode we can have many amplicons
         with pysam.FastxFile(ref_fasta) as f:
             for entry in f:
                 ref_seqs.append(entry.name)
-
     # in case there are no "good" datasets, print a short notice to the report and exit
     # early
     if not datasets:
@@ -143,13 +148,18 @@ def populate_report(report, metadata, datasets, ref_fasta):
                 Therefore, only a limited report is available. Consider relaxing the
                 filtering criteria (e.g. using a lower value for
                 """,
-                html_tags.kbd("--min_read_qual"),
+                html_tags.code("--min_read_qual"),
                 """) as this is sometimes caused by filtering out all reads from the
                 input data.
                 """,
             )
-        # show the pre-processing stats and omit all other sections
+        # show the pre-processing stats and consensus QC summaries (if in de-novo mode);
+        # omit all other sections
         preprocessing_section(report, bad_datasets)
+
+        if de_novo:
+            de_novo_qc_section(report, datasets + bad_datasets)
+
         return
 
     # intro and "at a glance" stats
@@ -158,11 +168,11 @@ def populate_report(report, metadata, datasets, ref_fasta):
             "This report contains tables and plots to help interpret the results "
             "of wf-amplicon. The workflow was run in"
         )
-        if not ref_mode:
-            # we're in no-ref mode
+        if de_novo:
+            # we're in de-novo mode
             html_tags.p(
                 intro_str,
-                html_tags.b("no-reference mode"),
+                html_tags.b("De-novo consensus mode"),
                 """. The individual sections of the report summarize the outcomes of the
                 different steps of the workflow (read filtering, consensus generation,
                 re-mapping against the consensus for depth of coverage calculation).
@@ -172,7 +182,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
             # we're in ref mode
             html_tags.p(
                 intro_str,
-                html_tags.b("reference mode"),
+                html_tags.b("Variant calling mode"),
                 """. The individual sections of the report summarize the
                 outcomes of the different steps of the workflow (read filtering, mapping
                 against the reference file containing the amplicon sequences, variant
@@ -182,7 +192,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
         html_tags.p("The input data contained:")
         # brief summary of how many samples / refs there were
         for name, items in zip(["sample", "amplicon"], [samples, ref_seqs]):
-            if name == "amplicon" and not ref_mode:
+            if name == "amplicon" and de_novo:
                 continue
             if len(items) > 1:
                 name += "s"
@@ -212,18 +222,18 @@ def populate_report(report, metadata, datasets, ref_fasta):
         tabs = Tabs()
         with tabs.add_dropdown_menu():
             for d in datasets:
-                basic_summary = d.get_basic_summary_stats(ref_mode)
+                basic_summary = d.get_basic_summary_stats(de_novo)
                 with tabs.add_dropdown_tab(d.sample_alias):
-                    # add values + titles of cards for stats reported in either case
-                    # (no-ref mode and with reference) first
+                    # add values + titles of cards for stats reported in both modes
+                    # (de-novo and variant calling) first
                     stats_card_items = [
                         (f'{basic_summary["reads"]:,g}', "Reads"),
                         (f'{basic_summary["bases"]:,g}', "Bases"),
                         (basic_summary["mean_length"].round(1), "Mean length"),
                         (basic_summary["mean_quality"].round(1), "Mean quality"),
                     ]
-                    if not ref_mode:
-                        # add the no-ref-only cards
+                    if de_novo:
+                        # add the de-novo-only cards
                         stats_card_items += [
                             (f'{basic_summary["unmapped_reads"]:,g}', "Unmapped reads"),
                             (
@@ -268,28 +278,40 @@ def populate_report(report, metadata, datasets, ref_fasta):
     # show preprocessing stats
     preprocessing_section(report, datasets)
 
+    # brief section for QC summaries (de-novo mode only)
+    if de_novo:
+        de_novo_qc_section(report, datasets + bad_datasets)
+
     # summarize bamstats results of all samples for the following report sections
     bamstats_summary = util.summarize_bamstats(datasets)
 
-    # section for alignment stats and (if in reference mode) detected variants summary
-    with report.add_section("Summary", "Summary"):
-        if not ref_mode:
+    # if in de-novo mode, only keep the sample amplicon combinations that had alignments
+    bamstats_summary.query("reads > 0", inplace=True)
+
+    # section for alignment stats (per sample and per-amplicon if variant calling mode;
+    # otherwise only per-sample)
+    if de_novo:
+        with report.add_section("Re-alignment summary", "Re-align"):
             # only show re-alignment stats: make a single table with two rows per
             # sample; one with stats of successfully re-aligned reads and one with stats
             # of unaligned reads
             html_tags.p(
                 """
                 The table below summarizes the main results of re-mapping the reads of
-                each barcode against the generated consensus.
+                each barcode against the generated consensus. Percentages of unmapped
+                reads are relative to the number of reads for that particular sample.
+                Other percentages are relative to the total number of reads / bases
+                including all samples.
                 """
             )
             with dom_util.container() as c:
-                no_ref_summary_table = util.format_no_ref_summary_table(
+                de_novo_summary_table = util.format_de_novo_summary_table(
                     bamstats_summary, datasets
                 )
             c.clear()
-            DataTable.from_pandas(no_ref_summary_table)
-        else:
+            DataTable.from_pandas(de_novo_summary_table)
+    else:
+        with report.add_section("Summary", "Summary"):
             with dom_util.container() as c:
                 # create summary table with one row per sample
                 per_sample_summary_table = util.format_per_sample_summary_table(
@@ -322,7 +344,9 @@ def populate_report(report, metadata, datasets, ref_fasta):
                 """
                 The two tables below (one per tab) briefly summarize the main results of
                 mapping the reads to the provided amplicon references and subsequent
-                variant calling.
+                variant calling. Percentages of unmapped reads are relative to the
+                number of reads for that particular sample. Other percentages are
+                relative to the total number of reads / bases including all samples.
                 """
             )
             tabs = Tabs()
@@ -358,15 +382,16 @@ def populate_report(report, metadata, datasets, ref_fasta):
         with tabs.add_dropdown_menu():
             # get a table in long format with the amplicon ID, centre position of the
             # depth windows, depth values, and sample alias
-            per_amplicon_depths = pd.concat(
-                [
-                    d.depth.assign(
-                        pos=lambda df: df[["start", "end"]].mean(axis=1),
-                        sample=d.sample_alias,
-                    )[["ref", "pos", "depth", "sample"]]
-                    for d in datasets
-                ]
-            )
+            depth_dfs = [
+                d.depth.assign(
+                    pos=lambda df: df[["start", "end"]].mean(axis=1),
+                    sample=d.sample_alias,
+                )[["ref", "pos", "depth", "sample"]]
+                for d in datasets
+            ]
+            if de_novo:
+                depth_dfs = [df.eval("ref = sample") for df in depth_dfs]
+            per_amplicon_depths = pd.concat(depth_dfs)
             for amplicon, depth_df in per_amplicon_depths.groupby("ref"):
                 # drop samples with zero depth along the whole amplicon
                 total_depths = depth_df.groupby("sample")["depth"].sum()
@@ -391,13 +416,13 @@ def populate_report(report, metadata, datasets, ref_fasta):
                     EZChart(plt, "epi2melabs")
 
     # add variant tables (skip if there were no VCFs)
-    if not ref_mode:
+    if de_novo:
         return
     with report.add_section("Variants", "Variants"):
         html_tags.p(
             "Haploid variant calling was performed with Medaka. Variants with low ",
             "depth (i.e. smaller than ",
-            html_tags.kbd("--min_coverage"),
+            html_tags.code("--min_coverage"),
             ') are shown under the "Low depth" tab. The numbers in the ',
             '"depth" column relate to the sequencing depth used to perform '
             "variant calling.",
@@ -538,3 +563,47 @@ def preprocessing_section(report, datasets):
             """
         )
         fastcat.SeqSummary(comb_per_read_stats)
+
+
+def de_novo_qc_section(report, datasets):
+    """Add a section with tables of post-assembly consensus QC stats."""
+    # make sure datasets are in the right order
+    datasets = sorted(datasets, key=lambda d: d.sample_alias)
+    with report.add_section("Quality Control", "QC"):
+        html_tags.p(
+            "After creating a draft assembly (either with ",
+            html_tags.a("Miniasm", href="https://github.com/lh3/miniasm"),
+            " or with ",
+            html_tags.a("SPOA", href="https://github.com/rvaser/spoa"),
+            """) basic quality control is performed on the consensus candidates (i.e.
+            the contigs in the assembly). The QC stats for the contigs produced by the
+            assembly pipeline are listed in the table below. If there are no contigs for
+            the "miniasm" method in the table, the Miniasm step either
+            failed or produced contigs that were shorter than the """,
+            html_tags.code("--force_spoa_length_threshold"),
+            """ parameter (and thus SPOA was run regardless of assembly quality). If
+            there are no contigs for "spoa", SPOA was not run as a contig produced by
+            Miniasm passed all filters and was selected.
+            """,
+        )
+        tabs = Tabs()
+        with tabs.add_dropdown_menu():
+            for d in datasets:
+                qc_summary = d.qc_summary
+                qc_summary["fail_reason"] = qc_summary["fail_reason"].fillna("-")
+                qc_summary["mean_depth"] = qc_summary["mean_depth"].round(1)
+                qc_summary["length"] = [f"{x:,d}" for x in qc_summary["length"]]
+                # give the contigs more meaningful names
+                method_counts = {"miniasm": 0, "spoa": 0}
+                for idx, row in qc_summary.iterrows():
+                    method = row["method"]
+                    method_counts[method] += 1
+                    qc_summary.loc[idx, "contig"] = f"{method}_{method_counts[method]}"
+
+                qc_summary.set_index("contig", inplace=True)
+                qc_summary.index.name = "Contig"
+                qc_summary.rename(
+                    columns=lambda col: col.replace("_", " ").capitalize(), inplace=True
+                )
+                with tabs.add_dropdown_tab(d.sample_alias):
+                    DataTable.from_pandas(qc_summary)

@@ -77,6 +77,11 @@ class ReportDataSet:
                     entry.info["DP"],
                 ]
 
+        # read the QC summaries if they exist
+        qc_summary = data_dir / "qc-summary.tsv"
+        if qc_summary.exists():
+            self.qc_summary = pd.read_csv(qc_summary, sep="\t")
+
     def __repr__(self):
         """Return human-readable string (simply the sample alias)."""
         return f"ReportDataSet('{self.sample_alias}')"
@@ -96,13 +101,13 @@ class ReportDataSet:
             self.all_inputs_valid = False
         return df
 
-    def get_basic_summary_stats(self, ref_mode):
+    def get_basic_summary_stats(self, de_novo):
         """Collect basic summary stats.
 
         This is used in the "at a glance" section at the beginning of the report.
         """
         # create series to hold the summary stats and add stats that are needed in
-        # no-ref and with-ref mode
+        # de-novo and variant calling mode
         basic_summary = pd.Series(
             0,
             index=["reads", "bases", "mean_length", "mean_quality"],
@@ -116,8 +121,8 @@ class ReportDataSet:
         basic_summary["mean_length"] = self.post_trim_per_file_stats.eval(
             "n_bases / n_seqs"
         )
-        # if in no-ref mode, add the no-ref-only stats and return
-        if not ref_mode:
+        # if in de-novo mode, add the de-novo-only stats and return
+        if de_novo:
             basic_summary["unmapped_reads"] = self.bamstats.eval('ref == "*"').sum()
             basic_summary["consensus_length"] = self.depth["end"].iloc[-1]
             return basic_summary
@@ -181,11 +186,11 @@ def summarize_bamstats(datasets):
 
     for d in datasets:
         # order refs so that the row for unmapped is at the end for each sample
-        refs = d.bamstats['ref'].unique()
-        if '*' in refs:
+        refs = d.bamstats["ref"].unique()
+        if "*" in refs:
             refs = [ref for ref in refs if ref != "*"] + ["*"]
         for amplicon in refs:
-            df = d.bamstats.query('ref == @amplicon')
+            df = d.bamstats.query("ref == @amplicon")
             n_reads = df.shape[0]
             n_bases = df["read_length"].sum()
             med_read_length = df["read_length"].median()
@@ -412,18 +417,18 @@ def format_per_amplicon_summary_table(summary_stats, datasets):
     return format_stats_table(per_amplicon_summary_stats)
 
 
-def format_no_ref_summary_table(summary_stats, datasets):
-    """Summarize and format per-sample bamstats results in no-ref mode.
+def format_de_novo_summary_table(summary_stats, datasets):
+    """Summarize and format per-sample bamstats results in de-novo mode.
 
     `summary_stats` contains summary stats for each sample--amplicon combination. In the
-    no-ref case this means there are two rows for each sample. One for the reads that
+    de-novo case this means there are two rows for each sample. One for the reads that
     were successfully re-aligned against the consensus (`summary_stats.loc[sample_name,
     sample_name]`) and one for the reads that did not re-align against the consensus
     (`summary_stats[sample_name, "*"]`). This function combines both entries into one
     row containing all the relevant information for the summary table.
     """
     # initialise results dataframe with zeros
-    no_ref_summary_stats = pd.DataFrame(
+    de_novo_summary_stats = pd.DataFrame(
         0,
         index=summary_stats.index.unique("sample"),
         columns=[
@@ -437,26 +442,25 @@ def format_no_ref_summary_table(summary_stats, datasets):
     )
     # group by sample and aggregate the stats
     for sample, df in summary_stats.groupby("sample"):
-        no_ref_summary_stats.loc[sample, ["reads", "bases"]] = df[
+        de_novo_summary_stats.loc[sample, ["reads", "bases"]] = df[
             ["reads", "bases"]
         ].sum()
         try:
-            no_ref_summary_stats.loc[sample, "unmapped"] = df.loc[
+            de_novo_summary_stats.loc[sample, "unmapped"] = df.loc[
                 (sample, "*"), "reads"
             ]
         except KeyError:
-            no_ref_summary_stats.loc[sample, "unmapped"] = 0
+            de_novo_summary_stats.loc[sample, "unmapped"] = 0
         # for median read length we have a look at the whole bamstats DataFrame
         # belonging to that sample
         (dataset,) = [x for x in datasets if x.sample_alias == sample]
-        no_ref_summary_stats.loc[sample, "median_read_length"] = dataset.bamstats[
+        de_novo_summary_stats.loc[sample, "median_read_length"] = dataset.bamstats[
             "read_length"
         ].median()
-        # multiply the mean cov + acc. per sample--amplicon combination by the number of
-        # reads for that combo and divide by total number of reads for this amplicon to
-        # get the overall per-amplicon average
-        no_ref_summary_stats.loc[sample, ["mean_cov", "mean_acc"]] = df.loc[
-            (sample, sample), ["mean_cov", "mean_acc"]
+        # there should only be one amplicon per sample
+        (amplicon,) = set(df.reset_index()["amplicon"]) - set("*")
+        de_novo_summary_stats.loc[sample, ["mean_cov", "mean_acc"]] = df.loc[
+            (sample, amplicon), ["mean_cov", "mean_acc"]
         ]
-    no_ref_summary_stats.fillna(0, inplace=True)
-    return format_stats_table(no_ref_summary_stats)
+    de_novo_summary_stats.fillna(0, inplace=True)
+    return format_stats_table(de_novo_summary_stats)

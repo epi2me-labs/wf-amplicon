@@ -4,8 +4,10 @@ import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
 include { fastq_ingress } from "./lib/ingress"
-include { pipeline as variantCallingPipeline } from "./modules/local/reference-based"
-include { pipeline as smoleculePipeline } from "./modules/local/smolecule"
+include { pipeline as variantCallingPipeline } from "./modules/local/variant-calling"
+include {
+    pipeline as deNovoPipeline_asm; pipeline as deNovoPipeline_spoa;
+} from "./modules/local/de-novo"
 
 
 OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
@@ -29,6 +31,10 @@ process getVersions {
     printf "porechop,%s\\n" \$(porechop --version) >> versions.txt
     samtools --version | head -n1 | tr ' ' ',' >> versions.txt
     printf "minimap2,%s\\n" \$(minimap2 --version) >> versions.txt
+    mosdepth --version | tr ' ' ',' >> versions.txt
+    printf "miniasm,%s\\n" \$(miniasm -V) >> versions.txt
+    printf "racon,%s\\n" \$(racon --version) >> versions.txt
+    printf "csvtk,%s\\n" \$(csvtk version | grep -oP '\\d+\\.\\d+.\\d+') >> versions.txt
     """
 }
 
@@ -40,7 +46,7 @@ process addMedakaToVersionsFile {
     script:
     """
     cp old_versions.txt versions.txt
-    medaka --version | tr ' ' ',' > versions.txt
+    medaka --version | tr ' ' ',' >> versions.txt
     """
 }
 
@@ -72,6 +78,47 @@ process downsampleReads {
     """
 }
 
+/*
+Instead of downsampling randomly, this process subsets input reads based on length.
+Depending on parameters, it drops a fraction (e.g. `0.05` for 5%) of longest reads and
+then selects a number of the next-longest reads (if `take_longest_remaining_reads` is
+`true`; if `false`, it will randomly downsample the reads after dropping the longest).
+Selected reads will always be sorted by length.
+*/
+process subsetReads {
+    label "wfamplicon"
+    cpus 1
+    input:
+        tuple val(meta), path("reads.fastq.gz"), path("fastcat-stats")
+        val drop_longest_frac
+        val take_longest_remaining_reads
+        val n_reads
+    output: tuple val(meta), path("subset.fastq.gz")
+    script:
+    String take_longest_remaining_arg = ""
+    if (take_longest_remaining_reads) {
+        take_longest_remaining_arg = "--take-longest-remaining"
+    }
+    """
+    echo $meta.alias  # sometimes useful for debugging
+
+    workflow-glue subset_reads \
+        fastcat-stats/per-read-stats.tsv.gz \
+        $drop_longest_frac \
+        $n_reads \
+        $take_longest_remaining_arg \
+        > target_ids.txt
+
+    # only attempt to subset reads if neither the FASTQ or the file with target IDs is
+    # empty (`samtools fqidx` would fail otherwise)
+    if [[ ( -n \$(zcat reads.fastq.gz | head -c1) ) && ( -s target_ids.txt ) ]]; then
+        samtools fqidx reads.fastq.gz -r target_ids.txt | bgzip > subset.fastq.gz
+    else
+        echo -n | bgzip > subset.fastq.gz
+    fi
+    """
+}
+
 process porechop {
     label "wfamplicon"
     cpus Math.min(params.threads, 5)
@@ -100,6 +147,20 @@ process collectFilesInDir {
     """
     mv staging_dir $dirname
     """
+}
+
+process concatTSVs {
+    label "wfamplicon"
+    cpus 1
+    input:
+        tuple val(meta), path("input/f*.tsv")
+        val fname
+    output: tuple val(meta), path(fname)
+    script:
+    """
+    csvtk concat -t input/* > $fname
+    """
+
 }
 
 process makeReport {
@@ -182,12 +243,25 @@ workflow pipeline {
         ch_results_for_report = ch_reads
         | map { meta, reads, stats_dir -> [meta, *file(stats_dir.resolve("*"))] }
 
-        // remove fastcat stats from reads channel
-        ch_reads = ch_reads.map { meta, reads, stats_dir -> [meta, reads] }
-
-        // downsample
-        if (params.reads_downsampling_size) {
-            ch_reads = downsampleReads(ch_reads, params.reads_downsampling_size)
+        // either subset reads (i.e. drop the longest and then take the next longest) or
+        // downsample naively or take all reads
+        if (params.drop_frac_longest_reads || params.take_longest_remaining_reads) {
+            // subset reads
+            ch_reads = subsetReads(
+                ch_reads,
+                params.drop_frac_longest_reads,
+                params.take_longest_remaining_reads,
+                params.reads_downsampling_size,
+            )
+        } else if (params.reads_downsampling_size) {
+            // downsample reads
+            ch_reads = downsampleReads(
+                ch_reads | map { meta, reads, stats -> [meta, reads] },
+                params.reads_downsampling_size
+            )
+        } else {
+            // take all reads
+            ch_reads = ch_reads.map { meta, reads, stats_dir -> [meta, reads] }
         }
 
         // trim adapters
@@ -220,17 +294,15 @@ workflow pipeline {
         ch_reads = ch_reads
         | join(ch_post_filter_n_reads)
         | filter { meta, reads, n_seqs -> n_seqs >= params.min_n_reads }
+        | map { meta, reads, n_seqs -> [meta, reads] }
 
         Path ref = OPTIONAL_FILE
         if (params.reference) {
-            // ref-based mode; make sure the ref file exists and run the variant calling
-            // pipeline
+            // variant calling mode; make sure the ref file exists and run the variant
+            // calling pipeline
             ref = file(params.reference, checkIfExists: true)
 
-            variantCallingPipeline(
-                ch_reads | map { meta, reads, n_seqs -> [meta, reads] },
-                ref
-            )
+            variantCallingPipeline(ch_reads, ref)
 
             // add variant calling results to channels for the report + to publish
             ch_results_for_report = ch_results_for_report
@@ -263,22 +335,52 @@ workflow pipeline {
                 )
             }
         } else {
-            // no reference; run medaka smolecule on each sample
-            smoleculePipeline(ch_reads)
+            // de-novo consensus mode: run pipeline for de-novo consensus; we try
+            // `miniasm` first and then run `spoa` on all samples that failed
+            deNovoPipeline_asm(ch_reads, "miniasm")
 
-            // add `smolecule` results to main results channel
+            deNovoPipeline_spoa(
+                deNovoPipeline_asm.out.metas_failed
+                // use `combine` instead of `join` here because `join` with `remainder:
+                // true` does not work as expected if one channel contains only the key
+                // (as is the case with the `metas_failed` channel here)
+                | combine(ch_reads, by: 0),
+                "spoa"
+            )
+
+            // combine the results for `miniasm` and `spoa`
+            ch_no_ref_results = deNovoPipeline_asm.out.passed
+            | mix(deNovoPipeline_spoa.out.passed)
+            | multiMap { meta, cons, bam, bai, bamstats, flagstat, depth ->
+                consensus: [meta, cons]
+                mapped: [meta, bam, bai]
+                for_report: [meta, bamstats, flagstat, depth]
+            }
+
+            // get the QC summary TSVs and concat them for each sample (if the `miniasm`
+            // and `spoa` pipelines were run for a sample, it will have two QC summary
+            // TSVs)
+            ch_concat_qc_summaries = concatTSVs(
+                deNovoPipeline_asm.out.qc_summaries
+                | mix(deNovoPipeline_spoa.out.qc_summaries)
+                | groupTuple,
+                "qc-summary.tsv"
+            )
+
+            // add de-novo results to main results channel
             ch_results_for_report = ch_results_for_report
-            | join(smoleculePipeline.out.mapping_stats, remainder: true)
-            | join(smoleculePipeline.out.depth, remainder: true)
+            | join(ch_no_ref_results.for_report, remainder: true)
+            | join(ch_concat_qc_summaries, remainder: true)
             // drop any `null`s from the joined list
             | map { it -> it.findAll { it } }
 
-            // collect files for report in directories (one dict per sample)
+            // add the consensus and alignments (re-aligned against the consensus) to
+            // the output channel for publishing
             ch_to_publish = ch_to_publish
             | mix(
-                smoleculePipeline.out.consensus
+                ch_no_ref_results.consensus
                 | map { meta, cons -> [cons, "$meta.alias/consensus"] },
-                smoleculePipeline.out.mapped
+                ch_no_ref_results.mapped
                 | map { meta, bam, bai -> [[bam, bai], "$meta.alias/alignments"] }
                 | transpose,
             )
