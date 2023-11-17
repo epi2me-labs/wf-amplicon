@@ -20,10 +20,24 @@ def main(args):
         args.depth, sep="\t", header=None, names=["ref", "start", "end", "depth"]
     )
 
-    # calculate the mean depths of the candidate consensus contigs
-    mean_depths = depths.groupby("ref").apply(
-        lambda df: df.eval("(end - start) * depth").sum() / df["end"].iloc[-1]
-    )
+    with pysam.FastxFile(args.consensus) as f:
+        fastq = {entry.name: entry for entry in f}
+
+    # make sure we got the same seq IDs in flagstat and the FASTQ file
+    seq_ids = [x for x in flagstat.index if x != "*"]
+    if set(fastq.keys()) != set(seq_ids):
+        ValueError("Sequence IDs in FASTQ and in flagstat file don't agree.")
+
+    # if all reads in the BAM are unmapped, `mosdepth` annoyingly outputs an empty
+    # per-base depth file; we need to account for that
+    if depths.empty:
+        mean_depths = pd.Series(0, index=seq_ids)
+    else:
+        # we got a valid depth file; calculate the mean depths of the candidate
+        # consensus contigs
+        mean_depths = depths.groupby("ref").apply(
+            lambda df: df.eval("(end - start) * depth").sum() / df["end"].iloc[-1]
+        )
 
     # perform QC checks on each contig
     qc_stats = pd.DataFrame(
@@ -42,7 +56,7 @@ def main(args):
     qc_stats.index.name = "contig"
     for contig, mean_depth in mean_depths.items():
         status = "passed"
-        contig_len = depths.query("ref == @contig")["end"].iloc[-1]
+        contig_len = len(fastq[contig].sequence)
         fail_reasons = []
         if mean_depth < args.minimum_depth:
             status = "failed"
