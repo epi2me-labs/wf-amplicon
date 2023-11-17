@@ -104,17 +104,17 @@ def main(args):
     logger.info(f"Report written to '{args.report_fname}'.")
 
 
-def populate_report(report, metadata, datasets, ref_fasta):
+def populate_report(report, metadata, all_datasets, ref_fasta):
     """Fill the report with content."""
     # put whether we got a ref file into a variable
     de_novo = ref_fasta is None
-    analysis_type_str = "De-novo consensus generation" if de_novo else "Variant calling"
-    samples = [d.sample_alias for d in datasets]
+    analysis_type = "de-novo consensus" if de_novo else "variant calling"
+    samples = [d.sample_alias for d in all_datasets]
     # check if any samples are missing any of the required inputs and filter them out
     # (we will mention them in the report below); this could only happen if there were
     # no reads for that particular sample
-    bad_datasets = [d for d in datasets if not d.all_inputs_valid]
-    datasets = [d for d in datasets if d.all_inputs_valid]
+    bad_datasets = [d for d in all_datasets if not d.all_inputs_valid]
+    datasets = [d for d in all_datasets if d.all_inputs_valid]
     ref_seqs = []
     if de_novo:
         # make sure that there was only one amplicon per sample in de-novo mode
@@ -124,6 +124,11 @@ def populate_report(report, metadata, datasets, ref_fasta):
                     "Found unexpected number of amplicons "
                     f"in de-novo consensus mode for sample {d.sample_alias}."
                 )
+        # some samples might have failed because of consensus QC and some for
+        # other reasons
+        bad_datasets_failed_qc = [d for d in bad_datasets if d.qc_summary is not None]
+        bad_datasets_other = [d for d in bad_datasets if d.qc_summary is None]
+
     else:
         # in variant calling mode we can have many amplicons
         with pysam.FastxFile(ref_fasta) as f:
@@ -144,7 +149,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
             # we got invalid data for all samples --> warn user and create truncated
             # report
             html_tags.p(
-                f"""{analysis_type_str} failed for all samples.
+                f"""The {analysis_type} pipeline failed for all samples.
                 Therefore, only a limited report is available. Consider relaxing the
                 filtering criteria (e.g. using a lower value for
                 """,
@@ -158,7 +163,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
         preprocessing_section(report, bad_datasets)
 
         if de_novo:
-            de_novo_qc_section(report, datasets + bad_datasets)
+            de_novo_qc_section(report, bad_datasets_failed_qc)
 
         return
 
@@ -172,7 +177,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
             # we're in de-novo mode
             html_tags.p(
                 intro_str,
-                html_tags.b("De-novo consensus mode"),
+                html_tags.b("de-novo consensus mode"),
                 """. The individual sections of the report summarize the outcomes of the
                 different steps of the workflow (read filtering, consensus generation,
                 re-mapping against the consensus for depth of coverage calculation).
@@ -182,7 +187,7 @@ def populate_report(report, metadata, datasets, ref_fasta):
             # we're in ref mode
             html_tags.p(
                 intro_str,
-                html_tags.b("Variant calling mode"),
+                html_tags.b("variant calling mode"),
                 """. The individual sections of the report summarize the
                 outcomes of the different steps of the workflow (read filtering, mapping
                 against the reference file containing the amplicon sequences, variant
@@ -204,13 +209,49 @@ def populate_report(report, metadata, datasets, ref_fasta):
             )
         # mention if there were any datasets with invalid input files
         if bad_datasets:
-            dom_util.raw(
-                f"""
-                <b>Warning: {analysis_type_str} failed for the following sample(s) (and
-                these will be omitted from the rest of the report):</b><br>
-                {", ".join([d.sample_alias for d in bad_datasets])}<br><br>
-                """
-            )
+            if de_novo:
+                # mention datasets with failed QC and those that failed for other
+                # reasons separately
+                failed_qc_aliases = [d.sample_alias for d in bad_datasets_failed_qc]
+                failed_assembly_aliases = [d.sample_alias for d in bad_datasets_other]
+                if failed_assembly_aliases:
+                    html_tags.b("Warning:")
+                    html_tags.p(
+                        f"The {analysis_type} pipeline failed for the following ",
+                        util.format_number_and_plural(
+                            len(failed_assembly_aliases), "sample"
+                        ),
+                        " (and these will be omitted in some sections of the report):",
+                        html_tags.br(),
+                        ", ".join(failed_assembly_aliases),
+                    )
+                    html_tags.p(
+                        "A potential reason for this might be that not enough reads "
+                        "remained for analysis after filtering and preprocessing."
+                    )
+                if failed_qc_aliases:
+                    html_tags.b("Warning:")
+                    html_tags.p(
+                        " Consensus quality control failed for the following ",
+                        util.format_number_and_plural(len(failed_qc_aliases), "sample"),
+                        ":",
+                        html_tags.br(),
+                        ", ".join(failed_qc_aliases),
+                    )
+            else:
+                html_tags.b("Warning:")
+                html_tags.p(
+                    f"The {analysis_type} pipeline failed for the following ",
+                    util.format_number_and_plural(len(bad_datasets), "sample"),
+                    " (and these will be omitted in some sections of the report):",
+                    html_tags.br(),
+                    ", ".join([d.sample_alias for d in bad_datasets]),
+                )
+                html_tags.p(
+                    "A potential reason for this might be that not enough reads "
+                    "remained for analysis after filtering and preprocessing."
+                )
+            html_tags.br()
         html_tags.h5("At a glance")
         html_tags.p(
             """
@@ -221,9 +262,20 @@ def populate_report(report, metadata, datasets, ref_fasta):
         # "at a glance" stats in cards (with one dropdown tab per sample)
         tabs = Tabs()
         with tabs.add_dropdown_menu():
-            for d in datasets:
+            for d in all_datasets:
                 basic_summary = d.get_basic_summary_stats(de_novo)
                 with tabs.add_dropdown_tab(d.sample_alias):
+                    if d in bad_datasets:
+                        if de_novo and d.sample_alias in failed_qc_aliases:
+                            html_tags.p(
+                                html_tags.b("Note: "),
+                                "Consensus QC failed for this sample.")
+                        else:
+                            html_tags.p(
+                                html_tags.b("Note: "),
+                                "The analysis pipeline failed for this sample "
+                                "(e.g. potentially due to too few reads)."
+                            )
                     # add values + titles of cards for stats reported in both modes
                     # (de-novo and variant calling) first
                     stats_card_items = [
@@ -276,11 +328,14 @@ def populate_report(report, metadata, datasets, ref_fasta):
                     )
 
     # show preprocessing stats
-    preprocessing_section(report, datasets)
+    preprocessing_section(report, all_datasets)
 
     # brief section for QC summaries (de-novo mode only)
     if de_novo:
-        de_novo_qc_section(report, datasets + bad_datasets)
+        de_novo_qc_section(
+            report,
+            sorted(datasets + bad_datasets_failed_qc, key=lambda d: d.sample_alias),
+        )
 
     # summarize bamstats results of all samples for the following report sections
     bamstats_summary = util.summarize_bamstats(datasets)
