@@ -81,6 +81,8 @@ class ReportDataSet:
         qc_summary = data_dir / "qc-summary.tsv"
         if qc_summary.exists():
             self.qc_summary = pd.read_csv(qc_summary, sep="\t")
+        else:
+            self.qc_summary = None
 
     def __repr__(self):
         """Return human-readable string (simply the sample alias)."""
@@ -108,9 +110,14 @@ class ReportDataSet:
         """
         # create series to hold the summary stats and add stats that are needed in
         # de-novo and variant calling mode
+        extra_fields = (
+            ["unmapped_reads", "consensus_length"]
+            if de_novo
+            else ["amplicons", "overall_mean_depth", "min_mean_depth", "snps", "indels"]
+        )
         basic_summary = pd.Series(
             0,
-            index=["reads", "bases", "mean_length", "mean_quality"],
+            index=["reads", "bases", "mean_length", "mean_quality"] + extra_fields,
         )
         basic_summary["reads"] = self.post_trim_per_file_stats["n_seqs"].sum()
         basic_summary["bases"] = self.post_trim_per_file_stats["n_bases"].sum()
@@ -121,6 +128,10 @@ class ReportDataSet:
         basic_summary["mean_length"] = self.post_trim_per_file_stats.eval(
             "n_bases / n_seqs"
         )
+        # return early if this sample didn't have all valid inputs (the post-trim
+        # per-file stats should always be there)
+        if not self.all_inputs_valid:
+            return basic_summary
         # if in de-novo mode, add the de-novo-only stats and return
         if de_novo:
             basic_summary["unmapped_reads"] = self.bamstats.eval('ref == "*"').sum()
@@ -464,3 +475,9 @@ def format_de_novo_summary_table(summary_stats, datasets):
         ]
     de_novo_summary_stats.fillna(0, inplace=True)
     return format_stats_table(de_novo_summary_stats)
+
+
+def format_number_and_plural(num, singular):
+    """Format a word as plural unless `num` is `1`."""
+    word = singular if num == 1 else singular + "s"
+    return f"{num} {word}"
