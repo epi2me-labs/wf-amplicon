@@ -1,0 +1,2 @@
++ If the workflow fails please run it with the demo data set to ensure the workflow itself is working. This will help us determine if the issue is related to the environment, input parameters or a bug.
++ Please see [here](https://labs.epi2me.io/trouble-shooting/) for how to resolve some common Nextflow issues and [here](https://labs.epi2me.io/how-to-exits/) for how to interpret command exit codes.

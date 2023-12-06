@@ -16,6 +16,7 @@ OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
 process getVersions {
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     output: path "versions.txt"
     script:
     """
@@ -41,6 +42,7 @@ process getVersions {
 process addMedakaToVersionsFile {
     label "medaka"
     cpus 1
+    memory "2 GB"
     input: path "old_versions.txt"
     output: path "versions.txt"
     script:
@@ -53,6 +55,7 @@ process addMedakaToVersionsFile {
 process getParams {
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     output:
         path "params.json"
     script:
@@ -66,6 +69,7 @@ process getParams {
 process downsampleReads {
     label "wfamplicon"
     cpus Math.min(params.threads, 3)
+    memory "2 GB"
     input:
         tuple val(meta), path("reads.fastq.gz")
         val n_reads
@@ -88,6 +92,7 @@ Selected reads will always be sorted by length.
 process subsetReads {
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     input:
         tuple val(meta), path("reads.fastq.gz"), path("fastcat-stats")
         val drop_longest_frac
@@ -122,7 +127,15 @@ process subsetReads {
 process porechop {
     label "wfamplicon"
     cpus Math.min(params.threads, 5)
-    input: tuple val(meta), path("reads.fastq.gz")
+    memory {
+        // `porechop` quite annoyingly loads the whole FASTQ into memory
+        // (https://github.com/rrwick/Porechop/issues/77) and uses up to 4x the size of
+        // the `.fastq.gz` file (depending on compression ratio); we give another factor
+        // of 2 for extra margin to be on the safe side
+        def fastq_size = fastq.size()
+        fastq_size > 2e9 ? "32 GB" : (fastq_size > 2.5e8 ? "16 GB" : "2 GB")
+    }
+    input: tuple val(meta), path(fastq, stageAs: "reads.fastq.gz")
     output:
         tuple val(meta), path("porechopped.fastq.gz"), emit: seqs
         tuple val(meta), path("porechopped-per-file-stats.tsv"), emit: stats
@@ -131,9 +144,15 @@ process porechop {
     //  run fastcat on porechopped reads so that we can include the post-trimming stats
     //  in the report
     """
-    fastcat <(porechop -i reads.fastq.gz -t $porechop_threads --discard_middle) \
-        -s $meta.alias \
-        -f porechopped-per-file-stats.tsv \
+    (
+        # only run porechop if the FASTQ isn't empty
+        if [[ -n \$(zcat reads.fastq.gz | head -c1) ]]; then
+            porechop -i reads.fastq.gz -t $porechop_threads --discard_middle
+        else
+            echo -n
+        fi
+    ) \
+    | fastcat /dev/stdin -s $meta.alias -f porechopped-per-file-stats.tsv \
     | bgzip > porechopped.fastq.gz
     """
 }
@@ -141,6 +160,7 @@ process porechop {
 process collectFilesInDir {
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     input: tuple path("staging_dir/*"), val(dirname)
     output: path(dirname)
     script:
@@ -152,6 +172,7 @@ process collectFilesInDir {
 process concatTSVs {
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     input:
         tuple val(meta), path("input/f*.tsv")
         val fname
@@ -166,6 +187,7 @@ process concatTSVs {
 process makeReport {
     label "wfamplicon"
     cpus 1
+    memory "8 GB"
     input:
         path "data/*"
         path ref, stageAs: "ref/*"
@@ -200,6 +222,7 @@ process output {
     // publish inputs to output directory
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     publishDir (
         params.out_dir,
         mode: "copy",

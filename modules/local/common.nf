@@ -1,6 +1,7 @@
 process alignReads {
     label "wfamplicon"
     cpus params.threads
+    memory "4 GB"
     input: tuple val(meta), path("reads.fastq.gz"), path("reference.fasta")
     output: tuple val(meta), path("*.bam"), path("*.bai")
     script:
@@ -16,6 +17,7 @@ process alignReads {
 process bamstats {
     label "wfamplicon"
     cpus Math.min(params.threads, 2)
+    memory "2 GB"
     input: tuple val(meta), path("input.bam"), path("input.bam.bai")
     output: tuple val(meta), path("bamstats.tsv"), path("bamstats-flagstat.tsv")
     script:
@@ -28,6 +30,7 @@ process bamstats {
 process mosdepth {
     label "wfamplicon"
     cpus Math.min(params.threads, 3)
+    memory "4 GB"
     input:
         tuple val(meta), path("input.bam"), path("input.bam.bai"), val(ref_id)
         val n_windows
@@ -69,6 +72,7 @@ process mosdepth {
 process concatMosdepthResultFiles {
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     input: tuple val(meta), path("depth.*.bed.gz")
     output: tuple val(meta), path("per-window-depth.tsv.gz")
     script:
@@ -82,6 +86,8 @@ process concatMosdepthResultFiles {
 
 process lookupMedakaModel {
     label "wfamplicon"
+    cpus 1
+    memory "2 GB"
     input:
         path("lookup_table")
         val basecall_model

@@ -5,6 +5,7 @@ include:
 
 variables:
   NF_WORKFLOW_OPTS: >
+    -executor.\$$local.memory 16GB
     --fastq test_data/fastq
     --reference test_data/reference.fasta
     --threads 2
@@ -41,6 +42,7 @@ docker-run:
     - if: $MATRIX_NAME == "ref-sample_sheet"
       variables:
         NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
           --fastq test_data/fastq
           --reference test_data/reference.fasta
           --sample_sheet test_data/sample_sheet.csv
@@ -54,6 +56,7 @@ docker-run:
     - if: $MATRIX_NAME == "filter-all"
       variables:
         NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
           --fastq test_data/fastq
           --reference test_data/reference.fasta
           --min_read_qual 20
@@ -69,6 +72,7 @@ docker-run:
     - if: $MATRIX_NAME == "de-novo"
       variables:
         NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
           --fastq test_data/fastq-denovo
           --drop_frac_longest_reads 0.05
         NF_PROCESS_FILES: >
