@@ -15,6 +15,7 @@ SPOA.
 process spoa {
     label = "medaka"
     cpus 1
+    memory "8 GB"
     input: tuple val(meta), path("reads.fastq.gz")
     output: tuple val(meta), path("reads.fastq.gz"), path("asm.fasta")
     script:
@@ -38,6 +39,7 @@ the draft asssembly. If none of the assembled contigs is longer than
 process miniasm {
     label = "wfamplicon"
     cpus params.threads
+    memory "8 GB"
     input: tuple val(meta), path("reads.fastq.gz")
     output: tuple val(meta), path("reads.fastq.gz"), path("asm.fasta"), env(STATUS)
     script:
@@ -71,6 +73,7 @@ too aggressively. We trim the sequences downstream instead.
 process racon {
     label = "wfamplicon"
     cpus params.threads
+    memory "8 GB"
     input: tuple val(meta), path("reads.fastq.gz"), path("draft.fasta")
     output: tuple val(meta), path("reads.fastq.gz"), path("polished.fasta")
     script:
@@ -96,6 +99,7 @@ Polish draft consensus with `medaka`. Also, emit the polished sequences as FASTQ
 process medakaConsensus {
     label "medaka"
     cpus Math.min(params.threads, 3)
+    memory "8 GB"
     input:
         tuple val(meta), path("input.bam"), path("input.bam.bai"), path("draft.fasta")
         val medaka_model
@@ -117,6 +121,7 @@ not for the plots in the report.
 process mosdepthPerBase {
     label "wfamplicon"
     cpus Math.min(params.threads, 3)
+    memory "4 GB"
     input: tuple val(meta), path("input.bam"), path("input.bam.bai")
     output: tuple val(meta), path("depth.per-base.bed.gz")
     script:
@@ -136,6 +141,7 @@ this is expected by the report code.
 process mosdepthWindows {
     label "wfamplicon"
     cpus Math.min(params.threads, 3)
+    memory "4 GB"
     input:
         tuple val(meta), path("input.bam"), path("input.bam.bai")
         val n_windows
@@ -193,6 +199,7 @@ process trimAndQC {
     label "wfamplicon"
     cpus params.threads
     cpus 1
+    memory "2 GB"
     input:
         tuple val(meta),
             path("consensus.fastq"),

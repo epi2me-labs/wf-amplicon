@@ -2,6 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
     "title": "epi2me-labs/wf-amplicon",
+    "workflow_title": "Amplicon workflow",
     "description": "Nextflow workflow for analysing Oxford Nanopore reads created by amplicon sequencing.",
     "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-amplicon/wf-amplicon-demo.tar.gz",
     "aws_demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-amplicon/wf-amplicon-demo/aws.nextflow.config",
@@ -314,8 +315,16 @@
             "type": "boolean"
         }
     },
-    "docs": {
-        "intro": "## Introduction\n\nThis [Nextflow](https://www.nextflow.io/) workflow provides a simple way to\nanalyse Oxford Nanopore reads generated from amplicons.\n\nThe workflow requires raw reads in FASTQ format and can be run in two modes:\n* Variant calling mode: Trigger this mode by passing a reference FASTA file.\n  After initial filtering (based on read length and quality) and adapter\n  trimming, [minimap2](https://github.com/lh3/minimap2) is used to align the\n  reads to the reference (please note that the reference should only contain the\n  expected sequences of the individual amplicons). Variants are then called with\n  [Medaka](https://github.com/nanoporetech/medaka). This mode allows for\n  multiple amplicons per barcode (for details on how to map specific target\n  amplicons to individual samples / barcodes, see below).\n* De-novo consensus mode: This mode is run when no reference file is passed.\n  Like for the \"variant calling mode\", reads are first filtered and trimmed.\n  Then, a consensus sequence is generated _de novo_ from the reads of each\n  sample. Reads are re-aligned against the draft consensus for polishing with\n  [Medaka](https://github.com/nanoporetech/medaka). Please note that only one\n  amplicon per barcode is supported in de-novo consensus mode.\n\nThe results of the workflow include an interactive HTML report, FASTA files with\nthe consensus sequences of the amplicons, BAM files with the alignments, and VCF\nfiles containing the variants (if run in variant calling mode).\n",
-        "links": "\n## Useful links\n\n- [Nextflow](https://www.nextflow.io/)\n- [Docker](https://www.docker.com/products/docker-desktop)\n- [Singularity](https://docs.sylabs.io/guides/latest/user-guide/)\n- [minimap2](https://github.com/lh3/minimap2)\n- [miniasm](https://github.com/lh3/miniasm)\n- [SPOA](https://github.com/rvaser/spoa)\n- [Medaka](https://github.com/nanoporetech/medaka)\n- [Porechop](https://github.com/rrwick/Porechop)\n"
+    "resources": {
+        "recommended": {
+            "cpus": 12,
+            "memory": "32GB"
+        },
+        "minimum": {
+            "cpus": 6,
+            "memory": "16GB"
+        },
+        "run_time": "0.5-5 minutes per sample (depending on number of reads, length of amplicons, and available compute).",
+        "arm_support": true
     }
 }

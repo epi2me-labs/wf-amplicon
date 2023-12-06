@@ -1,0 +1,1 @@
+Nextflow workflow for analysing Oxford Nanopore reads created by amplicon sequencing.

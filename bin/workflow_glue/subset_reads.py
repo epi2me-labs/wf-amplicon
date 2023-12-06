@@ -12,9 +12,12 @@ def main(args):
     logger = get_named_logger("subsetReads")
 
     logger.info("Read per-read stats and sort lengths.")
-    sorted_lengths = pd.read_csv(args.per_read_stats, sep="\t", index_col=0)[
-        "read_length"
-    ].sort_values(ascending=False)
+    sorted_lengths = pd.read_csv(
+        args.per_read_stats,
+        sep="\t",
+        index_col="read_id",
+        usecols=["read_id", "read_length"],
+    ).squeeze().sort_values(ascending=False)
 
     drop_longest_n = 0
     if args.drop_longest_frac:

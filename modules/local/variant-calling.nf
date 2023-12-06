@@ -13,6 +13,7 @@ process sanitizeRefFile {
     // them (and whitespace) with underscores
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     input: path "reference.fasta"
     output: path "reference_sanitized_seqIDs.fasta"
     script:
@@ -24,6 +25,7 @@ process sanitizeRefFile {
 process subsetRefFile {
     label "wfamplicon"
     cpus 1
+    memory "2 GB"
     input: tuple val(metas), path("reference.fasta"), val(target_seqs)
     output: tuple val(metas), path("reference_subset.fasta"), val(target_seqs)
     script:
@@ -38,6 +40,7 @@ process subsetRefFile {
 process downsampleBAMforMedaka {
     label "wfamplicon"
     cpus 1
+    memory "8 GB"
     input:
         tuple val(meta), path("input.bam"), path("input.bam.bai"), path("bamstats.tsv")
     output: tuple val(meta), path("downsampled.bam"), path("downsampled.bam.bai")
@@ -56,6 +59,7 @@ process downsampleBAMforMedaka {
 process medakaConsensus {
     label "medaka"
     cpus Math.min(params.threads, 2)
+    memory "8 GB"
     input:
         tuple val(meta), path("input.bam"), path("input.bam.bai"), val(reg)
         val medaka_model
@@ -70,6 +74,7 @@ process medakaConsensus {
 process medakaVariant {
     label "medaka"
     cpus 1
+    memory "8 GB"
     input:
         tuple val(meta),
             path("consensus_probs*.hdf"),
@@ -109,6 +114,7 @@ process medakaVariant {
 process mergeVCFs {
     label "medaka"
     cpus 1
+    memory "4 GB"
     input: path "VCFs/file*.vcf.gz"
     output: tuple path("combined.vcf.gz"), path("combined.vcf.gz.csi")
     script:
@@ -125,6 +131,7 @@ process mergeVCFs {
 process mergeBAMs {
     label "wfamplicon"
     cpus 1
+    memory "16 GB"
     input:
         path "BAMs/file*.bam"
         path "indices/file*.bam.bai"
