@@ -218,10 +218,12 @@ def populate_report(report, metadata, all_datasets, ref_fasta):
                     html_tags.b("Warning:")
                     html_tags.p(
                         f"The {analysis_type} pipeline failed for the following ",
-                        util.format_number_and_plural(
-                            len(failed_assembly_aliases), "sample"
+                        (
+                            "sample (and it"
+                            if (n_failed := len(failed_assembly_aliases)) == 1
+                            else f"{n_failed} samples (and they"
                         ),
-                        " (and these will be omitted in some sections of the report):",
+                        " will be omitted in some sections of the report):",
                         html_tags.br(),
                         ", ".join(failed_assembly_aliases),
                     )
@@ -269,12 +271,13 @@ def populate_report(report, metadata, all_datasets, ref_fasta):
                         if de_novo and d.sample_alias in failed_qc_aliases:
                             html_tags.p(
                                 html_tags.b("Note: "),
-                                "Consensus QC failed for this sample.")
+                                "Consensus QC failed for this sample.",
+                            )
                         else:
                             html_tags.p(
                                 html_tags.b("Note: "),
                                 "The analysis pipeline failed for this sample "
-                                "(e.g. potentially due to too few reads)."
+                                "(e.g. potentially due to too few reads).",
                             )
                     # add values + titles of cards for stats reported in both modes
                     # (de-novo and variant calling) first
