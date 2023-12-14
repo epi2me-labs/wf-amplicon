@@ -48,6 +48,12 @@ def argparser():
         help="Sample sheet with metadata.",
     )
     parser.add_argument(
+        "--downsampling-size",
+        type=int,
+        default=0,
+        help="Downsampled number of reads (per sample).",
+    )
+    parser.add_argument(
         "--versions",
         help="CSV with program versions.",
         required=True,
@@ -98,13 +104,13 @@ def main(args):
     report = labs.LabsReport(
         "Workflow Amplicon Sequencing report", "wf-amplicon", args.params, args.versions
     )
-    populate_report(report, metadata, datasets, args.reference)
+    populate_report(report, metadata, datasets, args.reference, args.downsampling_size)
 
     report.write(args.report_fname)
     logger.info(f"Report written to '{args.report_fname}'.")
 
 
-def populate_report(report, metadata, all_datasets, ref_fasta):
+def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size):
     """Fill the report with content."""
     # put whether we got a ref file into a variable
     de_novo = ref_fasta is None
@@ -254,6 +260,13 @@ def populate_report(report, metadata, all_datasets, ref_fasta):
                     "remained for analysis after filtering and preprocessing."
                 )
             html_tags.br()
+        if downsampling_size:
+            with html_tags.div(cls="alert alert-warning"):
+                html_tags.p(
+                    html_tags.b("Note: "),
+                    "The data was downsampled to "
+                    f"{downsampling_size} reads per sample.",
+                )
         html_tags.h5("At a glance")
         html_tags.p(
             """

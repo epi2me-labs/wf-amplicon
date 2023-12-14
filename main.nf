@@ -209,6 +209,7 @@ process makeReport {
         --data data \
         $ref_arg \
         $sample_sheet_arg \
+        --downsampling-size $params.reads_downsampling_size \
         --versions versions.txt \
         --params params.json
     """
