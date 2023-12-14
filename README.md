@@ -108,6 +108,7 @@ Find related protocols in the [Nanopore community](https://community.nanoporetec
 |--------------------------|------|-------------|------|---------|
 | fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | analyse_unclassified | boolean | Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory. | If selected and if the input is a multiplex directory the workflow will also process the unclassified directory. | False |
+| reads_downsampling_size | integer | Downsample to this number of reads per sample. | Downsampling is performed after filtering. Downsampling is performed by default to improve performance. Set to 0 to disable downsampling and use all data for analysis. Increasing the downsampling size (or setting it to zero) may lead to excessive memory consumption. | 1500 |
 | reference | string | Path to a reference FASTA file. | The reference file should contain one sequence per amplicon. |  |
 
 
@@ -128,7 +129,6 @@ Find related protocols in the [Nanopore community](https://community.nanoporetec
 | min_read_qual | number | Reads with a lower mean quality will be removed. |  | 10 |
 | drop_frac_longest_reads | number | Drop fraction of longest reads. | The very longest reads might be concatemers or contain other artifacts. In many cases removing them simplifies de novo consensus generation. | 0.05 |
 | take_longest_remaining_reads | boolean | Whether to use the longest (remaining) reads. | With this option, reads are not randomly selected during downsampling (potentially after the longest reads have been removed), but instead the longest remaining reads are taken. This generally improves performance on long amplicons. | True |
-| reads_downsampling_size | integer | Downsample to this number of reads per sample. | Downsampling is performed after filtering. Set to 0 to disable downsampling. | 0 |
 | min_n_reads | number | Samples / barcodes with fewer reads will not be processed. |  | 40 |
 
 

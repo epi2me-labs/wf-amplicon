@@ -29,6 +29,13 @@
                     "description": "Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory.",
                     "help_text": "If selected and if the input is a multiplex directory the workflow will also process the unclassified directory."
                 },
+                "reads_downsampling_size": {
+                    "type": "integer",
+                    "default": 1500,
+                    "title": "Downsampling size",
+                    "description": "Downsample to this number of reads per sample.",
+                    "help_text": "Downsampling is performed after filtering. Downsampling is performed by default to improve performance. Set to 0 to disable downsampling and use all data for analysis. Increasing the downsampling size (or setting it to zero) may lead to excessive memory consumption."
+                },
                 "reference": {
                     "type": "string",
                     "format": "file-path",
@@ -92,13 +99,6 @@
                     "default": true,
                     "description": "Whether to use the longest (remaining) reads.",
                     "help_text": "With this option, reads are not randomly selected during downsampling (potentially after the longest reads have been removed), but instead the longest remaining reads are taken. This generally improves performance on long amplicons."
-                },
-                "reads_downsampling_size": {
-                    "type": "integer",
-                    "default": 0,
-                    "title": "Downsampling size",
-                    "description": "Downsample to this number of reads per sample.",
-                    "help_text": "Downsampling is performed after filtering. Set to 0 to disable downsampling."
                 },
                 "min_n_reads": {
                     "type": "number",
