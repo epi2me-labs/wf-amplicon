@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Default for `--reads_downsampling_size` to 1500.
 
+### Fixed
+- The workflow failing when a sample had only a single read.
+
 ## [v1.0.0]
 ### Added
 - Memory requirements for each process.
