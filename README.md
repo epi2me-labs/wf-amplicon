@@ -164,7 +164,7 @@ Find related protocols in the [Nanopore community](https://community.nanoporetec
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
 | number_depth_windows | integer | Number of windows used during depth of coverage calculations. | Depth of coverage is calculated for each sample across each amplicon split into this number of windows. A higher number will produce more fine-grained plots at the expense of run time. | 100 |
-| medaka_target_depth_per_strand | integer | Downsample each amplicon to this per-strand depth before running Medaka. | Medaka performs best with even strand coverage and depths between 80X and 400X. To avoid too high coverage, the workflow downsamples the reads for each amplicon to this per-strand depth before running Medaka. Changing this value is discouraged as it might cause decreased performance. | 75 |
+| medaka_target_depth_per_strand | integer | Downsample each amplicon to this per-strand depth before running Medaka. | Medaka performs best with even strand coverage and depths between 80X and 400X. To avoid too high coverage, the workflow downsamples the reads for each amplicon to this per-strand depth before running Medaka. Changing this value is discouraged as it might cause decreased performance. | 150 |
 
 
 ### Miscellaneous Options
