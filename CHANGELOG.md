@@ -6,7 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v1.0.1]
 ### Changed
-- Default for `--reads_downsampling_size` to 1500.
+- Default for `--reads_downsampling_size` to 1500 to limit memory usage.
+- Default for `--medaka_target_depth_per_strand` to 150 as the workflow now supports longer amplicons.
 
 ### Fixed
 - The workflow failing when a sample had only a single read.

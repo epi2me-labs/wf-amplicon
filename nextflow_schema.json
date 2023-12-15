@@ -229,7 +229,7 @@
                 },
                 "medaka_target_depth_per_strand": {
                     "type": "integer",
-                    "default": 75,
+                    "default": 150,
                     "description": "Downsample each amplicon to this per-strand depth before running Medaka.",
                     "help_text": "Medaka performs best with even strand coverage and depths between 80X and 400X. To avoid too high coverage, the workflow downsamples the reads for each amplicon to this per-strand depth before running Medaka. Changing this value is discouraged as it might cause decreased performance."
                 }
