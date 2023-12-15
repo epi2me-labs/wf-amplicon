@@ -17,7 +17,7 @@ def main(args):
         sep="\t",
         index_col="read_id",
         usecols=["read_id", "read_length"],
-    ).squeeze().sort_values(ascending=False)
+    )["read_length"].sort_values(ascending=False)
 
     drop_longest_n = 0
     if args.drop_longest_frac:
