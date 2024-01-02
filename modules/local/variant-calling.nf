@@ -73,7 +73,7 @@ process medakaConsensus {
 
 process medakaVariant {
     label "medaka"
-    cpus 1
+    cpus 2
     memory "8 GB"
     input:
         tuple val(meta),
