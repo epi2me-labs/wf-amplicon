@@ -57,7 +57,7 @@
                     "type": "string",
                     "format": "file-path",
                     "description": "A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files.",
-                    "help_text": "The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. A `type` column is required for certain workflows and should have the following values; `test_sample`, `positive_control`, `negative_control`, `no_template_control`."
+                    "help_text": "The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. In variant calling mode, a `ref` column can be added to tell the workflow which reference sequences should be used for which samples (please see the FAQs section in the documentation for details)."
                 },
                 "sample": {
                     "type": "string",
@@ -91,14 +91,15 @@
                 "drop_frac_longest_reads": {
                     "type": "number",
                     "default": 0.05,
+                    "title": "Drop longest reads",
                     "description": "Drop fraction of longest reads.",
-                    "help_text": "The very longest reads might be concatemers or contain other artifacts. In many cases removing them simplifies de novo consensus generation."
+                    "help_text": "The very longest reads might be concatemers or contain other artifacts. In many cases removing them simplifies de novo consensus generation. When running variant calling mode with multiple amplicons per sample, it is recommended to set this to 0.0."
                 },
                 "take_longest_remaining_reads": {
                     "type": "boolean",
                     "default": true,
                     "description": "Whether to use the longest (remaining) reads.",
-                    "help_text": "With this option, reads are not randomly selected during downsampling (potentially after the longest reads have been removed), but instead the longest remaining reads are taken. This generally improves performance on long amplicons."
+                    "help_text": "With this option enabled, reads are not randomly selected during downsampling. Instead, after dropping the longest reads (unless the `drop_frac_longest_reads` parameter is set to 0) the longest remaining reads are kept. This is recommended for de-novo mode when working with long amplicons. When running variant calling mode with multiple amplicons per sample, it is recommended to disable this option."
                 },
                 "min_n_reads": {
                     "type": "number",
@@ -222,6 +223,7 @@
             "properties": {
                 "number_depth_windows": {
                     "type": "integer",
+                    "title": "Number of depth windows",
                     "description": "Number of windows used during depth of coverage calculations.",
                     "help_text": "Depth of coverage is calculated for each sample across each amplicon split into this number of windows. A higher number will produce more fine-grained plots at the expense of run time.",
                     "minimum": 10,
