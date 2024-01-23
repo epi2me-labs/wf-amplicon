@@ -18,10 +18,23 @@ After parsing the sample sheet, the raw reads are filtered. Relevant options for
 - `--max_read_length`
 - `--min_read_qual`
 
-Reads can optionally also be downsampled (`--reads_downsampling_size` controls the number of reads to keep per sample).
+By default, reads are also downsampled.
 The workflow supports random downsampling as well as selecting reads based on read length.
-Subsetting based on read length tends to work better for de-novo consensus generation and usually does not decrease performance of the variant calling mode.
-It is thus set as default (see the FAQ section below for details and for how to disable this).
+Subsetting based on read length tends to work better for de-novo consensus generation and does not decrease performance of variant calling mode when running with only one amplicon per sample.
+
+- `--reads_downsampling_size`: This controls the number of reads to keep per sample
+- `--drop_frac_longest_reads`: Drop a fraction (e.g. 0.05 for 5%) of the longest reads.
+  As the very longest reads might stem from concatemers or other sequencing artifacts, they might interfere with consensus generation and it is generally better to remove them in de-novo consensus mode.
+- `--take_longest_remaining_reads`: Use the longest reads instead of random downsampling; note that this is done after dropping the longest reads according to `--drop_frac_longest_reads`.
+  This can be beneficial when assembling long amplicons in de-novo consensus mode in some cases.
+
+The default values for these parameters are listed in the [Inputs section](#pre-processing-options).
+The defaults work well for
+
+- De-novo consensus mode.
+- Variant calling mode with one amplicon per sample.
+
+When running variant calling mode with more than one amplicon per sample we recommend changing the parameters to `--drop_frac_longest_reads 0 --take_longest_remaining_reads false` in order to perform random downsampling.
 The selected reads are then trimmed with [Porechop](https://github.com/rrwick/Porechop) prior to downstream analysis.
 
 > Note: Samples with fewer reads than `--min_n_reads` after preprocessing are ignored.

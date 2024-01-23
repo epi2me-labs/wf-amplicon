@@ -15,8 +15,8 @@ The workflow requires raw reads in FASTQ format and can be run in two modes:
   trimming, [minimap2](https://github.com/lh3/minimap2) is used to align the
   reads to the reference. Variants are then called with
   [Medaka](https://github.com/nanoporetech/medaka). This mode allows for
-  multiple amplicons per barcode (for details on how to map specific target
-  amplicons to individual samples / barcodes, see below).
+  multiple amplicons per barcode (before running with multiple amplicons per
+  barcode, please read the relevant sections in the [Pipeline Overview](#pipeline-overview) and [FAQs](#FAQs) below).
 * De-novo consensus mode: This mode is run when no reference file is passed.
   Like for the "variant calling mode", reads are first filtered and trimmed.
   Then, a consensus sequence is generated _de novo_ from the reads of each
@@ -139,7 +139,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| sample_sheet | string | A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files. | The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. A `type` column is required for certain workflows and should have the following values; `test_sample`, `positive_control`, `negative_control`, `no_template_control`. |  |
+| sample_sheet | string | A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files. | The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. In variant calling mode, a `ref` column can be added to tell the workflow which reference sequences should be used for which samples (please see the FAQs section in the documentation for details). |  |
 | sample | string | A single sample name for non-multiplexed data. Permissible if passing a single .fastq(.gz) file or directory of .fastq(.gz) files. |  |  |
 
 
@@ -150,8 +150,8 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | min_read_length | integer | Shorter reads will be removed. |  | 300 |
 | max_read_length | integer | Longer reads will be removed. |  |  |
 | min_read_qual | number | Reads with a lower mean quality will be removed. |  | 10 |
-| drop_frac_longest_reads | number | Drop fraction of longest reads. | The very longest reads might be concatemers or contain other artifacts. In many cases removing them simplifies de novo consensus generation. | 0.05 |
-| take_longest_remaining_reads | boolean | Whether to use the longest (remaining) reads. | With this option, reads are not randomly selected during downsampling (potentially after the longest reads have been removed), but instead the longest remaining reads are taken. This generally improves performance on long amplicons. | True |
+| drop_frac_longest_reads | number | Drop fraction of longest reads. | The very longest reads might be concatemers or contain other artifacts. In many cases removing them simplifies de novo consensus generation. When running variant calling mode with multiple amplicons per sample, it is recommended to set this to 0.0. | 0.05 |
+| take_longest_remaining_reads | boolean | Whether to use the longest (remaining) reads. | With this option enabled, reads are not randomly selected during downsampling. Instead, after dropping the longest reads (unless the `drop_frac_longest_reads` parameter is set to 0) the longest remaining reads are kept. This is recommended for de-novo mode when working with long amplicons. When running variant calling mode with multiple amplicons per sample, it is recommended to disable this option. | True |
 | min_n_reads | number | Samples / barcodes with fewer reads will not be processed. |  | 40 |
 
 
@@ -242,10 +242,23 @@ After parsing the sample sheet, the raw reads are filtered. Relevant options for
 - `--max_read_length`
 - `--min_read_qual`
 
-Reads can optionally also be downsampled (`--reads_downsampling_size` controls the number of reads to keep per sample).
+By default, reads are also downsampled.
 The workflow supports random downsampling as well as selecting reads based on read length.
-Subsetting based on read length tends to work better for de-novo consensus generation and usually does not decrease performance of the variant calling mode.
-It is thus set as default (see the FAQ section below for details and for how to disable this).
+Subsetting based on read length tends to work better for de-novo consensus generation and does not decrease performance of variant calling mode when running with only one amplicon per sample.
+
+- `--reads_downsampling_size`: This controls the number of reads to keep per sample
+- `--drop_frac_longest_reads`: Drop a fraction (e.g. 0.05 for 5%) of the longest reads.
+  As the very longest reads might stem from concatemers or other sequencing artifacts, they might interfere with consensus generation and it is generally better to remove them in de-novo consensus mode.
+- `--take_longest_remaining_reads`: Use the longest reads instead of random downsampling; note that this is done after dropping the longest reads according to `--drop_frac_longest_reads`.
+  This can be beneficial when assembling long amplicons in de-novo consensus mode in some cases.
+
+The default values for these parameters are listed in the [Inputs section](#pre-processing-options).
+The defaults work well for
+
+- De-novo consensus mode.
+- Variant calling mode with one amplicon per sample.
+
+When running variant calling mode with more than one amplicon per sample we recommend changing the parameters to `--drop_frac_longest_reads 0 --take_longest_remaining_reads false` in order to perform random downsampling.
 The selected reads are then trimmed with [Porechop](https://github.com/rrwick/Porechop) prior to downstream analysis.
 
 > Note: Samples with fewer reads than `--min_n_reads` after preprocessing are ignored.
@@ -311,8 +324,12 @@ Regardless of how the draft consensus was generated (`miniasm` or `spoa`), a fin
 
 ## FAQ's
 
-*Variant calling mode: How can I specify specific reference sequences for individual barcodes?* - Per default, the workflow aligns all barcodes against all sequences in the supplied reference.
-If you want to map specific reference sequences to specific amplicons, you can add a column named `ref` containing the respective target reference IDs to the sample sheet.
+*Do I need to change any parameters or can I stick to the defaults?* - The default parameters have been set for optimal results when running de-novo consensus mode or variant calling mode with a single amplicon per sample with amplicon sizes between 500 and 5,000 bp.
+When running variant calling mode with several amplicons per sample, we recommend setting `--drop_frac_longest_reads 0 --take_longest_remaining_reads false`.
+Also, when your amplicons are very long or short, it might be a good idea to change the minimum read length filter cutoff.
+For more details, please refer to the [Pipeline Overview](#pipeline-overview).
+
+*How can I select which reference is paired with which sample when running variant calling mode with multiple amplicons?* - If you want to map specific reference sequences to specific amplicons, you can add a column named `ref` containing the respective target reference IDs to the sample sheet.
 If a barcode should be aligned against multiple reference sequences, their IDs can be included as a space-delimited list.
 If a specific sample should be aligned against all references, you can leave the corresponding cell in the `ref` column blank.
 Consider the following example with 4 barcodes and 2 sequences in the reference file. The sample sheet tells the workflow that the first two barcodes (`sample1` and `sample2`) are expected to contain
@@ -336,6 +353,7 @@ Furthermore, `spoa` depends on the order of reads in the input and benefits from
 Therefore, the following workflow options are used per default `--drop_frac_longest_reads 0.05 --take_longest_remaining_reads`.
 This essentially drops the longest 5% of reads and then takes selects the next longest reads (either all of them or the number specified with `--reads_downsampling_size`).
 To disable the default behaviour and enforce random downsampling of input reads, use `--drop_frac_longest_reads 0 --take_longest_remaining_reads false`.
+Disabling the default behaviour in favour of random downsampling is generally recommended when running variant calling mode with multiple amplicons per sample.
 
 *Is there a difference between the consensus sequences created in variant calling and de-novo consensus mode?* - In variant calling mode, the consensus sequence is generated by applying the variants found by [Medaka](https://github.com/nanoporetech/medaka) to the provided reference.
 This comes with the caveat that structural variants too large to be detected by Medaka are not going to be represented in the consensus.

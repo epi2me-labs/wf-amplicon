@@ -12,7 +12,7 @@
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| sample_sheet | string | A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files. | The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. A `type` column is required for certain workflows and should have the following values; `test_sample`, `positive_control`, `negative_control`, `no_template_control`. |  |
+| sample_sheet | string | A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files. | The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. In variant calling mode, a `ref` column can be added to tell the workflow which reference sequences should be used for which samples (please see the FAQs section in the documentation for details). |  |
 | sample | string | A single sample name for non-multiplexed data. Permissible if passing a single .fastq(.gz) file or directory of .fastq(.gz) files. |  |  |
 
 
@@ -23,8 +23,8 @@
 | min_read_length | integer | Shorter reads will be removed. |  | 300 |
 | max_read_length | integer | Longer reads will be removed. |  |  |
 | min_read_qual | number | Reads with a lower mean quality will be removed. |  | 10 |
-| drop_frac_longest_reads | number | Drop fraction of longest reads. | The very longest reads might be concatemers or contain other artifacts. In many cases removing them simplifies de novo consensus generation. | 0.05 |
-| take_longest_remaining_reads | boolean | Whether to use the longest (remaining) reads. | With this option, reads are not randomly selected during downsampling (potentially after the longest reads have been removed), but instead the longest remaining reads are taken. This generally improves performance on long amplicons. | True |
+| drop_frac_longest_reads | number | Drop fraction of longest reads. | The very longest reads might be concatemers or contain other artifacts. In many cases removing them simplifies de novo consensus generation. When running variant calling mode with multiple amplicons per sample, it is recommended to set this to 0.0. | 0.05 |
+| take_longest_remaining_reads | boolean | Whether to use the longest (remaining) reads. | With this option enabled, reads are not randomly selected during downsampling. Instead, after dropping the longest reads (unless the `drop_frac_longest_reads` parameter is set to 0) the longest remaining reads are kept. This is recommended for de-novo mode when working with long amplicons. When running variant calling mode with multiple amplicons per sample, it is recommended to disable this option. | True |
 | min_n_reads | number | Samples / barcodes with fewer reads will not be processed. |  | 40 |
 
 

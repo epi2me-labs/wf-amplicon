@@ -7,8 +7,8 @@ The workflow requires raw reads in FASTQ format and can be run in two modes:
   trimming, [minimap2](https://github.com/lh3/minimap2) is used to align the
   reads to the reference. Variants are then called with
   [Medaka](https://github.com/nanoporetech/medaka). This mode allows for
-  multiple amplicons per barcode (for details on how to map specific target
-  amplicons to individual samples / barcodes, see below).
+  multiple amplicons per barcode (before running with multiple amplicons per
+  barcode, please read the relevant sections in the [Pipeline Overview](#pipeline-overview) and [FAQs](#FAQs) below).
 * De-novo consensus mode: This mode is run when no reference file is passed.
   Like for the "variant calling mode", reads are first filtered and trimmed.
   Then, a consensus sequence is generated _de novo_ from the reads of each
