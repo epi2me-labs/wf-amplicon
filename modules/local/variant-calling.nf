@@ -18,7 +18,7 @@ process sanitizeRefFile {
     output: path "reference_sanitized_seqIDs.fasta"
     script:
     """
-    sed '/^>/s/:\\|\\*\\| /_/g' reference.fasta > reference_sanitized_seqIDs.fasta
+    sed '/^>/s/[:\\*\\t ]/_/g' reference.fasta > reference_sanitized_seqIDs.fasta
     """
 }
 
