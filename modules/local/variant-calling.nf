@@ -8,9 +8,9 @@ include {
 
 
 process sanitizeRefFile {
-    // some tools don't like `:` or `*` in FASTA header lines lines (e.g. medaka will
-    // try to parse the sequence ID as region string if it contains `:`) --> replace
-    // them (and whitespace) with underscores
+    // some tools don't like `:`, `"`, `*`, `$`, `\` in FASTA header lines (e.g. medaka
+    // will try to parse the sequence ID as region string if it contains `:`) -->
+    // replace them (and whitespace) with underscores
     label "wfamplicon"
     cpus 1
     memory "2 GB"
@@ -18,7 +18,7 @@ process sanitizeRefFile {
     output: path "reference_sanitized_seqIDs.fasta"
     script:
     """
-    sed '/^>/s/[:\\*\\t ]/_/g' reference.fasta > reference_sanitized_seqIDs.fasta
+    sed '/^>/s/[: \" \\* \\t \\\$ \\\\]/_/g' reference.fasta > reference_sanitized_seqIDs.fasta
     """
 }
 
