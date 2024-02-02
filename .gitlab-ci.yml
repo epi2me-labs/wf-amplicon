@@ -25,7 +25,17 @@ docker-run:
   #   the variables, but it is broken when using long strings! See CW-756
   parallel:
     matrix:
-      - MATRIX_NAME: ["ref", "ref-sample_sheet", "filter-all", "de-novo"]
+      - MATRIX_NAME:
+          [
+            "ref",
+            "ref-sample_sheet",
+            "filter-all",
+            "de-novo",
+            "ref-no-reads",
+            "ref-single-read",
+            "de-novo-no-reads",
+            "de-novo-single-read",
+          ]
   rules:
     # NOTE As we're overriding the rules block for the included docker-run
     #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
@@ -79,3 +89,59 @@ docker-run:
           main.nf
           modules/local/de-novo.nf
         NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,racon
+
+    - if: $MATRIX_NAME == "ref-no-reads"
+      variables:
+        NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
+          --fastq test_data/fastq-no-reads
+          --reference test_data/reference.fasta
+          --threads 2
+          --combine_results
+        NF_PROCESS_FILES: >
+          main.nf
+          modules/local/variant-calling.nf
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,subsetReads,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,subsetRefFile,concatTSVs
+        AFTER_NEXTFLOW_CMD: |
+          grep 'No reads left after pre-processing' .nextflow.log &&
+          grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
+    - if: $MATRIX_NAME == "ref-single-read"
+      variables:
+        NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
+          --fastq test_data/fastq-single-read
+          --reference test_data/reference.fasta
+          --threads 2
+          --combine_results
+        NF_PROCESS_FILES: >
+          main.nf
+          modules/local/variant-calling.nf
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,subsetReads,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,subsetRefFile,concatTSVs
+        AFTER_NEXTFLOW_CMD: grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
+
+    - if: $MATRIX_NAME == "de-novo-no-reads"
+      variables:
+        NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
+          --fastq test_data/fastq-no-reads
+          --threads 2
+          --combine_results
+        NF_PROCESS_FILES: >
+          main.nf
+          modules/local/de-novo.nf
+        NF_IGNORE_PROCESSES: downsampleReads,subsetReads,subsetRefFile,concatTSVs,medakaConsensus,miniasm,mosdepthPerBase,mosdepthWindows,racon,spoa,trimAndQC
+        AFTER_NEXTFLOW_CMD: |
+          grep 'No reads left after pre-processing' .nextflow.log &&
+          grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
+    - if: $MATRIX_NAME == "de-novo-single-read"
+      variables:
+        NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
+          --fastq test_data/fastq-single-read
+          --threads 2
+          --combine_results
+        NF_PROCESS_FILES: >
+          main.nf
+          modules/local/de-novo.nf
+        NF_IGNORE_PROCESSES: downsampleReads,subsetReads,subsetRefFile,concatTSVs,medakaConsensus,miniasm,mosdepthPerBase,mosdepthWindows,racon,spoa,trimAndQC
+        AFTER_NEXTFLOW_CMD: "grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html"
