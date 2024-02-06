@@ -200,6 +200,12 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
                 calling).
                 """,
             )
+            with html_tags.div(cls="alert alert-info"):
+                html_tags.p(
+                    html_tags.b("Note: "),
+                    "If the sequence IDs in the reference file contained special "
+                    "characters, they were replaced with underscores."
+                )
         html_tags.p("The input data contained:")
         # brief summary of how many samples / refs there were
         for name, items in zip(["sample", "amplicon"], [samples, ref_seqs]):
