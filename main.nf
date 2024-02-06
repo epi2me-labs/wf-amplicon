@@ -320,7 +320,7 @@ workflow pipeline {
         | filter { meta, reads, n_seqs -> n_seqs >= params.min_n_reads }
         | map { meta, reads, n_seqs -> [meta, reads] }
 
-        Path ref = OPTIONAL_FILE
+        def ref = OPTIONAL_FILE
         if (params.reference) {
             // variant calling mode; make sure the ref file exists and run the variant
             // calling pipeline
@@ -335,6 +335,9 @@ workflow pipeline {
             | join(variantCallingPipeline.out.variants, remainder: true)
             // drop any `null`s from the joined list
             | map { it - null }
+
+            // set `ref` to the sanitised reference
+            ref = variantCallingPipeline.out.sanitized_ref
 
             ch_to_publish = ch_to_publish
             | mix(

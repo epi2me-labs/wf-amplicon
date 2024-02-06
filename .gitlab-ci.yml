@@ -29,6 +29,7 @@ docker-run:
           [
             "ref",
             "ref-sample_sheet",
+            "ref-with-spaces",
             "filter-all",
             "de-novo",
             "ref-no-reads",
@@ -63,6 +64,18 @@ docker-run:
           main.nf
           modules/local/variant-calling.nf
         NF_IGNORE_PROCESSES: downsampleReads,concatTSVs
+    - if: $MATRIX_NAME == "ref-with-spaces"
+      variables:
+        NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
+          --fastq test_data/fastq
+          --reference 'test_data/ref with (parens) and spaces.fa'
+          --threads 2
+          --combine_results
+        NF_PROCESS_FILES: >
+          main.nf
+          modules/local/variant-calling.nf
+        NF_IGNORE_PROCESSES: downsampleReads,subsetReads,subsetRefFile,concatTSVs
     - if: $MATRIX_NAME == "filter-all"
       variables:
         NF_WORKFLOW_OPTS: >
