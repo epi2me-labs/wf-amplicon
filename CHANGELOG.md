@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+### Fixed
+- The workflow failing when there were tab characters in the FASTA header lines of reference sequences.
+
+### Changed
+- The way the reference sequence IDs are sanitised to prevent issues with special characters.
+
 ## [v1.0.3]
 ### Fixed
 - The workflow failing when there was a whitespace in the name of the reference file.
