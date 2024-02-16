@@ -18,7 +18,9 @@ process sanitizeRefFile {
     output: path "reference_sanitized_seqIDs.fasta"
     script:
     """
-    sed '/^>/s/:\\|\\*\\| /_/g' reference.fasta > reference_sanitized_seqIDs.fasta
+    # use `sed` to replace all non-alphanumerical characters with underscores (`/2g`
+    # skips the first match which will be `>`)
+    sed -E '/^>/s/[^[:alnum:]]+/_/2g' reference.fasta > reference_sanitized_seqIDs.fasta
     """
 }
 
@@ -175,8 +177,11 @@ workflow pipeline {
         // subset the sanitized ref file
         ref_id_map = Channel.empty()
         | concat(
-            Channel.of(ref).splitFasta(record: [id: true]).map{ it.id }.collect(),
-            san_ref.splitFasta(record: [id: true]).map{ it.id }.collect()
+            // `splitFasta(reecord: [id: true])` does not split the header line at tab
+            // characters. We thus split again here to make sure that we only got the
+            // seq ID
+            Channel.of(ref).splitFasta(record: [id: true]).map{ it.id.split()[0] }.collect(),
+            san_ref.splitFasta(record: [id: true]).map{ it.id.split()[0] }.collect()
         )
         | toList
         | map { it.transpose().collectEntries() as LinkedHashMap }
