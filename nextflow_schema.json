@@ -247,7 +247,7 @@
                     "type": "integer",
                     "default": 4,
                     "description": "Maximum number of CPU threads to use per workflow task.",
-                    "help_text": "Several tasks in this workflow benefit from using multiple CPU threads. This option sets the maximum number of CPU threads for such processes. The total CPU resources used by the workflow are constrained by the executor configuration in `nextflow.config`."
+                    "help_text": "Several tasks in this workflow benefit from using multiple CPU threads. This option sets the maximum number of CPU threads for such processes. The total CPU resources used by the workflow are constrained by the Nextflow executor configuration."
                 },
                 "disable_ping": {
                     "type": "boolean",
