@@ -194,7 +194,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| threads | integer | Maximum number of CPU threads to use per workflow task. | Several tasks in this workflow benefit from using multiple CPU threads. This option sets the maximum number of CPU threads for such processes. The total CPU resources used by the workflow are constrained by the executor configuration in `nextflow.config`. | 4 |
+| threads | integer | Maximum number of CPU threads to use per workflow task. | Several tasks in this workflow benefit from using multiple CPU threads. This option sets the maximum number of CPU threads for such processes. The total CPU resources used by the workflow are constrained by the Nextflow executor configuration. | 4 |
 | disable_ping | boolean | Enable to prevent sending a workflow ping. |  | False |
 
 
