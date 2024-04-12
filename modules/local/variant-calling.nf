@@ -125,8 +125,15 @@ process mergeVCFs {
         cd VCFs
         ls | xargs -n1 bcftools index
     )
-    bcftools merge VCFs/file*.vcf.gz -Oz -o combined.vcf.gz
-    bcftools index combined.vcf.gz
+    # if we have a single VCF (i.e. there are 2 files in `VCFs`; the VCF and index),
+    # don't merge and return the single VCF
+    if [[ \$(ls VCFs | wc -l) -eq 2 ]]; then
+        mv VCFs/file.vcf.gz combined.vcf.gz
+        mv VCFs/file.vcf.gz.csi combined.vcf.gz.csi
+    else
+        bcftools merge VCFs/file*.vcf.gz -Oz -o combined.vcf.gz
+        bcftools index combined.vcf.gz
+    fi
     """
 }
 
