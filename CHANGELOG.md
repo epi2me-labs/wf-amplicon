@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Variant calling mode with `--combine_results` failing with a single sample/barcode.
 
+### Changed
+- The depth plot in the report now uses consistent colours for individual samples across the different amplicons.
+
 ## [v1.0.4]
 ### Fixed
 - The workflow failing when there were tab characters in the FASTA header lines of reference sequences.

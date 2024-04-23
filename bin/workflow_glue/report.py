@@ -10,6 +10,7 @@ from ezcharts.components.reports import labs
 from ezcharts.layout.snippets import Tabs
 from ezcharts.layout.snippets.stats import Stats
 from ezcharts.layout.snippets.table import DataTable
+from ezcharts.plots.util import choose_palette
 import pandas as pd
 import pysam
 
@@ -64,14 +65,9 @@ def argparser():
         help="JSON file containing the workflow parameters.",
     )
     parser.add_argument(
-        "--revision",
-        default="unknown",
-        help="git branch/tag of the executed workflow",
-    )
-    parser.add_argument(
-        "--commit",
-        default="unknown",
-        help="git commit of the executed workflow",
+        "--wf-version",
+        required=True,
+        help="version of the executed workflow",
     )
     return parser
 
@@ -102,7 +98,11 @@ def main(args):
 
     # create, fill, and write out the report
     report = labs.LabsReport(
-        "Workflow Amplicon Sequencing report", "wf-amplicon", args.params, args.versions
+        "Workflow Amplicon Sequencing report",
+        "wf-amplicon",
+        args.params,
+        args.versions,
+        args.wf_version,
     )
     populate_report(report, metadata, datasets, args.reference, args.downsampling_size)
 
@@ -469,6 +469,8 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
             if de_novo:
                 depth_dfs = [df.eval("ref = sample") for df in depth_dfs]
             per_amplicon_depths = pd.concat(depth_dfs)
+            # define colours for each sample
+            palette = dict(zip(samples, choose_palette()))
             for amplicon, depth_df in per_amplicon_depths.groupby("ref"):
                 # drop samples with zero depth along the whole amplicon
                 total_depths = depth_df.groupby("sample")["depth"].sum()
@@ -482,6 +484,7 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
                         x="pos",
                         y="depth",
                         hue="sample",
+                        palette=palette,
                     )
                     plt.title = {"text": "Coverage along amplicon"}
                     plt.xAxis.max = depth_df["pos"].max()
