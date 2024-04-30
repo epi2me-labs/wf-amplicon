@@ -456,6 +456,7 @@ workflow {
         "sample_sheet":params.sample_sheet,
         "analyse_unclassified":params.analyse_unclassified,
         "stats": true,
+        "per_read_stats": true,
         "fastcat_extra_args": fastcat_extra_args.join(" ")])
 
     // run workflow
