@@ -1,4 +1,5 @@
 """Create workflow report."""
+import itertools
 from pathlib import Path
 
 import dominate.tags as html_tags
@@ -459,25 +460,39 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
         with tabs.add_dropdown_menu():
             # get a table in long format with the amplicon ID, centre position of the
             # depth windows, depth values, and sample alias
-            depth_dfs = [
-                d.depth.assign(
+            depth_dfs = []
+            for d in datasets:
+                depth_df = d.depth.assign(
                     pos=lambda df: df[["start", "end"]].mean(axis=1),
                     sample=d.sample_alias,
                 )[["ref", "pos", "depth", "sample"]]
-                for d in datasets
-            ]
+                # if an amplicon has 0 depth along its whole length, drop it
+                nonzero_depth_amplicons = [
+                    k
+                    for k, v in depth_df.groupby("ref")["depth"].sum().items()
+                    if v > 0
+                ]
+                if not nonzero_depth_amplicons:
+                    continue
+                depth_df = depth_df.query("ref.isin(@nonzero_depth_amplicons)")
+                depth_dfs.append(depth_df)
+            # in de-novo mode, we re-aligned against the consensus and use the sample
+            # name as amplicon name
             if de_novo:
                 depth_dfs = [df.eval("ref = sample") for df in depth_dfs]
-            per_amplicon_depths = pd.concat(depth_dfs)
-            # define colours for each sample
-            palette = dict(zip(samples, choose_palette()))
-            for amplicon, depth_df in per_amplicon_depths.groupby("ref"):
-                # drop samples with zero depth along the whole amplicon
-                total_depths = depth_df.groupby("sample")["depth"].sum()
-                samples_with_nonzero_depth = list(total_depths.index[total_depths > 0])
-                if not samples_with_nonzero_depth:
-                    continue
-                depth_df = depth_df.query("sample.isin(@samples_with_nonzero_depth)")
+            # combine the data and group by amplicon
+            per_amplicon_depths = pd.concat(depth_dfs).groupby("ref")
+            # if there are amplicons with more than one sample (i.e. plots with more
+            # than one line), define colours for each sample; otherwise, just go with
+            # the default
+            palette = None
+            if not de_novo:
+                for amplicon, depth_df in per_amplicon_depths:
+                    if len(depth_df["sample"].unique()) > 1:
+                        palette = dict(zip(samples, itertools.cycle(choose_palette())))
+                        break
+            # draw the plots
+            for amplicon, depth_df in per_amplicon_depths:
                 with tabs.add_dropdown_tab(amplicon):
                     plt = ezc.lineplot(
                         data=depth_df.round(2),
