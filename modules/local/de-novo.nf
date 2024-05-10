@@ -17,7 +17,7 @@ process spoa {
     cpus 1
     memory "8 GB"
     input: tuple val(meta), path("reads.fastq.gz")
-    output: tuple val(meta), path("reads.fastq.gz"), path("asm.fasta")
+    output: tuple val(meta), path("reads.fastq.gz"), path("asm.fasta"), optional: true
     script:
     String min_cov_args = ""
     if (params.spoa_minimum_relative_coverage) {
@@ -26,7 +26,10 @@ process spoa {
     """
     echo $meta.alias  # makes some debugging easier
 
-    workflow-glue run_spoa reads.fastq.gz $min_cov_args > asm.fasta
+    workflow-glue run_spoa reads.fastq.gz \
+        $min_cov_args \
+        --max-allowed-read-length $params.spoa_max_allowed_read_length \
+        -o asm.fasta
     """
 }
 
