@@ -32,6 +32,7 @@ docker-run:
             "ref-with-spaces",
             "filter-all",
             "de-novo",
+            "de-novo-spoa-max-len-2000",  # CW-3864
             "ref-no-reads",
             "ref-single-read",
             "de-novo-no-reads",
@@ -97,11 +98,34 @@ docker-run:
         NF_WORKFLOW_OPTS: >
           -executor.\$$local.memory 16GB
           --fastq test_data/fastq-denovo
-          --drop_frac_longest_reads 0.05
         NF_PROCESS_FILES: >
           main.nf
           modules/local/de-novo.nf
         NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,racon
+        # make sure we got outputs for both barcodes
+        AFTER_NEXTFLOW_CMD: |
+          ls -p $$CI_PROJECT_NAME | grep -q barcode01/ &&
+          ls -p $$CI_PROJECT_NAME | grep -q barcode02/
+
+    - if: $MATRIX_NAME == "de-novo-spoa-max-len-2000"
+      variables:
+        # we run with a higher `--force_spoa_length_threshold` so that the SPOA
+        # process is attempted on both barcodes, but due to
+        # `--spoa_max_allowed_read_length 2000` SPOA actually won't be run on
+        # barcode02 and there won't be a consensus for it
+        NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
+          --fastq test_data/fastq-denovo
+          --force_spoa_length_threshold 6000
+          --spoa_max_allowed_read_length 2000
+        NF_PROCESS_FILES: >
+          main.nf
+          modules/local/de-novo.nf
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,racon
+        # make sure we only got outputs for barcode01
+        AFTER_NEXTFLOW_CMD: |
+          ls -p $$CI_PROJECT_NAME | grep -q barcode01/ &&
+          ls -p $$CI_PROJECT_NAME | grep -vq barcode02/
 
     - if: $MATRIX_NAME == "ref-no-reads"
       variables:

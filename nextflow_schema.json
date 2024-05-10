@@ -180,6 +180,13 @@
                     "description": "Minimum coverage (relative to the number of reads per sample after filtering) when constructing the consensus with SPOA.",
                     "help_text": "Needs to be a number between 0.0 and 1.0. The result of multiplying this number with the number of reads for the corresponding sample (after filtering) is passed on to SPOA's `--min-coverage` option."
                 },
+                "spoa_max_allowed_read_length": {
+                    "type": "integer",
+                    "default": 5000,
+                    "hidden": true,
+                    "description": "Don't run SPOA on longer reads.",
+                    "help_text": "SPOA was not intended for very long reads. It won't be run if the input contains reads longer than this (after filtering)."
+                },
                 "minimum_mean_depth": {
                     "type": "integer",
                     "default": 30,

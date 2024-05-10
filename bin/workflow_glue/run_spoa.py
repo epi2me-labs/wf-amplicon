@@ -11,6 +11,31 @@ import spoa
 from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 
+def get_seqs_from_fastx_and_check_lengths(file, logger, max_len=None):
+    """Get sequences from FASTx file while making sure they are not too long.
+
+    We don't want to run SPOA on very long reads as it was not intended for this and
+    will take an exorbitant amount of memory.
+
+    :param file: FASTx file
+    :param logger: logger for error message
+    :param max_len: maximum allowed read length, defaults to None
+    :yield: sequences from FASTx file
+    """
+    with pysam.FastxFile(file, "r") as f:
+        for entry in f:
+            seq = entry.sequence
+            if max_len is not None and len(seq) > max_len:
+                # we shouldn't run SPOA on long reads
+                logger.error(
+                    "Tried to run SPOA with reads longer than "
+                    f"{max_len}. This is what assemblers are for. "
+                    "Aborting..."
+                )
+                sys.exit()
+            yield seq
+
+
 def align(s1, s2):
     """Use parasail to align two sequences.
 
@@ -67,18 +92,18 @@ def main(args):
     # read input file and determine the orientation of the reads
     fwd = []
     rev = []
-    with pysam.FastxFile(args.fastq, "r") as f:
-        first_seq = next(f).sequence
-        fwd.append(first_seq)
-        for entry in f:
-            seq = entry.sequence
-            rc = reverse_complement(seq)
-            fwd_score = align(seq, first_seq).score
-            rev_score = align(rc, first_seq).score
-            if fwd_score > rev_score:
-                fwd.append(seq)
-            else:
-                rev.append(rc)
+    seqs = get_seqs_from_fastx_and_check_lengths(
+        args.fastq, logger, args.max_allowed_read_length
+    )
+    first_seq = next(seqs)
+    for seq in seqs:
+        rc = reverse_complement(seq)
+        fwd_score = align(seq, first_seq).score
+        rev_score = align(rc, first_seq).score
+        if fwd_score > rev_score:
+            fwd.append(seq)
+        else:
+            rev.append(rc)
 
     # uniformly interleave the reads
     interleaved_reads = interleave_lists(fwd, rev)
@@ -97,7 +122,8 @@ def main(args):
     cons, _ = spoa.poa([cons, *interleaved_reads], genmsa=False, min_coverage=min_cov)
 
     # write out the result
-    sys.stdout.write(f">consensus\n{cons}\n")
+    with open(args.output, "w") as outfile:
+        outfile.write(f">consensus\n{cons}\n")
 
     logger.info("Wrote consensus to STDOUT.")
 
@@ -107,8 +133,19 @@ def argparser():
     parser = wf_parser("run_spoa")
     parser.add_argument("fastq", type=Path, help="Path to input FASTQ file")
     parser.add_argument(
+        "-o", required=True, dest="output", help="Output FASTA file name"
+    )
+    parser.add_argument(
         "--relative-min-coverage",
         type=float,
         help="Minimum relative coverage of POA graph",
+    )
+    parser.add_argument(
+        "--max-allowed-read-length",
+        type=int,
+        help=(
+            "SPOA can't deal with very long reads; "
+            "don't run it when encountering reads longer than this"
+        ),
     )
     return parser

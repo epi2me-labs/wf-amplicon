@@ -678,7 +678,8 @@ def de_novo_qc_section(report, datasets):
             html_tags.code("--force_spoa_length_threshold"),
             """ parameter (and thus SPOA was run regardless of assembly quality). If
             there are no contigs for "spoa", SPOA was not run as a contig produced by
-            Miniasm passed all filters and was selected.
+            Miniasm passed all filters and was selected. If the sample is missing
+            altogether, both assembly methods failed.
             """,
         )
         tabs = Tabs()
