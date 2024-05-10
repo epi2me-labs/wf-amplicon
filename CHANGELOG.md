@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Variant calling mode with `--combine_results` failing with a single sample/barcode.
 
 ### Changed
+- Only define different colours for the individual samples in the per-amplicon depth plots when necessary (i.e. when there is at least one amplicon depth plot that shows more than one sample).
+
+### Changed
 - The depth plot in the report now uses consistent colours for individual samples across the different amplicons.
 
 ## [v1.0.4]
