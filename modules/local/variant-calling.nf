@@ -15,12 +15,15 @@ process sanitizeRefFile {
     cpus 1
     memory "2 GB"
     input: path "reference.fasta"
-    output: path "reference_sanitized_seqIDs.fasta"
+    output:
+        path("reference_sanitized_seqIDs.fasta"), emit: fasta
+        path("reference_sanitized_seqIDs.fasta.fai"), emit: index
     script:
     """
     # use `sed` to replace all non-alphanumerical characters with underscores (`/2g`
     # skips the first match which will be `>`)
     sed -E '/^>/s/[^[:alnum:]]+/_/2g' reference.fasta > reference_sanitized_seqIDs.fasta
+    samtools faidx reference_sanitized_seqIDs.fasta
     """
 }
 
@@ -28,7 +31,11 @@ process subsetRefFile {
     label "wfamplicon"
     cpus 1
     memory "2 GB"
-    input: tuple val(metas), path("reference.fasta"), val(target_seqs)
+    input: tuple \
+        val(metas),
+        path("reference.fasta"),
+        path("reference.fasta.fai"),
+        val(target_seqs)
     output: tuple val(metas), path("reference_subset.fasta"), val(target_seqs)
     script:
     // need to manually join with " " here as this will be an `ArrayList` and not a
@@ -177,7 +184,7 @@ workflow pipeline {
         // some tools don't like `:` or `*` in FASTA header lines lines (e.g. medaka
         // will try to parse the sequence ID as region string if it contains `:`) and we
         // need to sanitize the ref IDs
-        san_ref = sanitizeRefFile(ref)
+        (san_ref, san_ref_idx) = sanitizeRefFile(ref)
 
         // create a map from refID to sanitized refID; we'll use this to translate
         // target ref IDs from the sample sheet to sanitized ref IDs so that we can
@@ -199,8 +206,9 @@ workflow pipeline {
         | map { meta, reads -> [meta["ref"]?.split() as Set, meta] }
         | groupTuple
         | combine(san_ref)
+        | combine(san_ref_idx)
         | combine(ref_id_map)
-        | branch { refs, metas, san_ref, ref_id_map ->
+        | branch { refs, metas, san_ref, san_ref_idx, ref_id_map ->
             with_target_refs: refs as boolean
             no_target_refs: true
         }
@@ -209,15 +217,16 @@ workflow pipeline {
         // subset of sanitized ref IDs to the channel. For samples without target ref
         // IDs, add the full sanitized ref file and all sanitized ref IDs.
         ch_sanitized_refs_and_ids = ch_branched.with_target_refs
-        | map { refs, metas, san_ref, ref_id_map ->
+        | map { refs, metas, san_ref, san_ref_idx, ref_id_map ->
             ArrayList ordered_target_ref_ids = ref_id_map.keySet().findAll { it in refs }
             ArrayList sanitized_target_ref_ids = \
                 ref_id_map.subMap(ordered_target_ref_ids).values()
-            [metas, san_ref, sanitized_target_ref_ids]
+            [metas, san_ref, san_ref_idx, sanitized_target_ref_ids]
         }
         | subsetRefFile
         | mix(
-            ch_branched.no_target_refs | map { _, metas, san_ref, ref_id_map ->
+            ch_branched.no_target_refs
+            | map { refs, metas, san_ref, san_ref_idx, ref_id_map ->
                 [metas, san_ref, ref_id_map.values() as ArrayList]
             }
         )
@@ -286,6 +295,7 @@ workflow pipeline {
         }
     emit:
         sanitized_ref = san_ref
+        sanitized_ref_index = san_ref_idx
         mapped = alignReads.out
         mapping_stats = bamstats.out
         depth = concatMosdepthResultFiles.out
