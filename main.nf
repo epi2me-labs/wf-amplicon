@@ -4,6 +4,7 @@ import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
 include { fastq_ingress } from "./lib/ingress"
+include { configure_igv } from "./lib/common"
 include { pipeline as variantCallingPipeline } from "./modules/local/variant-calling"
 include {
     pipeline as deNovoPipeline_asm; pipeline as deNovoPipeline_spoa;
@@ -216,6 +217,25 @@ process makeReport {
     """
 }
 
+// process to combine all de-novo consensus seqs into a single FASTA file for use as
+// reference in the IGV config
+process catFastqIntoFasta {
+    label "wfamplicon"
+    cpus params.threads
+    cpus 1
+    memory "2 GB"
+    input: path "cons_seqs/seq*.fastq"
+    output:
+        path("all-consensus-seqs.fasta"), emit: fasta
+        path("all-consensus-seqs.fasta.fai"), emit: index
+    script:
+    """
+    cat cons_seqs/* | seqkit fq2fa > all-consensus-seqs.fasta
+    samtools faidx all-consensus-seqs.fasta
+    """
+}
+
+
 // See https://github.com/nextflow-io/nextflow/issues/1636. This is the only way to
 // publish files from a workflow whilst decoupling the publish from the process steps.
 // The process takes a tuple containing the filename and the name of a sub-directory to
@@ -322,6 +342,7 @@ workflow pipeline {
         | map { meta, reads, n_seqs -> [meta, reads] }
 
         def ref = OPTIONAL_FILE
+        def ref_idx = OPTIONAL_FILE
         if (params.reference) {
             // variant calling mode; make sure the ref file exists and run the variant
             // calling pipeline
@@ -339,10 +360,12 @@ workflow pipeline {
 
             // set `ref` to the sanitised reference
             ref = variantCallingPipeline.out.sanitized_ref
+            ref_idx = variantCallingPipeline.out.sanitized_ref_index
 
             ch_to_publish = ch_to_publish
             | mix(
                 variantCallingPipeline.out.sanitized_ref | map { [it, null] },
+                variantCallingPipeline.out.sanitized_ref_index | map { [it, null] },
                 variantCallingPipeline.out.variants
                 | map { meta, vcf, idx -> [[vcf, idx], "$meta.alias/variants"] }
                 | transpose,
@@ -377,7 +400,7 @@ workflow pipeline {
             )
 
             // combine the results for `miniasm` and `spoa`
-            ch_no_ref_results = deNovoPipeline_asm.out.passed
+            ch_de_novo_results = deNovoPipeline_asm.out.passed
             | mix(deNovoPipeline_spoa.out.passed)
             | multiMap { meta, cons, bam, bai, bamstats, flagstat, depth ->
                 consensus: [meta, cons]
@@ -395,9 +418,18 @@ workflow pipeline {
                 "qc-summary.tsv"
             )
 
+            // create a FASTA file containing the consensus seqs for all samples (this
+            // is needed as reference for IGV)
+            all_de_novo_cons_seqs = ch_de_novo_results.consensus
+            // use `collect` instead of `toSortedList` here as `collect` returns an
+            // empty channel if there are no elements in the input channel
+            | collect(flat: false)
+            | map { list -> list.sort { it[0].alias }.collect { it[1] } }
+            | catFastqIntoFasta
+
             // add de-novo results to main results channel
             ch_results_for_report = ch_results_for_report
-            | join(ch_no_ref_results.for_report, remainder: true)
+            | join(ch_de_novo_results.for_report, remainder: true)
             | join(ch_concat_qc_summaries, remainder: true)
             // drop any `null`s from the joined list
             | map { it -> it.findAll { it } }
@@ -406,11 +438,13 @@ workflow pipeline {
             // the output channel for publishing
             ch_to_publish = ch_to_publish
             | mix(
-                ch_no_ref_results.consensus
+                ch_de_novo_results.consensus
                 | map { meta, cons -> [cons, "$meta.alias/consensus"] },
-                ch_no_ref_results.mapped
+                ch_de_novo_results.mapped
                 | map { meta, bam, bai -> [[bam, bai], "$meta.alias/alignments"] }
                 | transpose,
+                all_de_novo_cons_seqs.fasta | map { [it, null] },
+                all_de_novo_cons_seqs.index | map { [it, null] },
             )
         }
 
@@ -434,6 +468,35 @@ workflow pipeline {
         ch_to_publish = ch_to_publish
         | mix(makeReport.out | map { [it, null] } )
 
+        // create the IGV config file and add it to the publishing channel
+        igv_fnames = ch_to_publish
+        | map { path, dirname ->
+            // get a string of the relative path in the output directory after
+            // publishing the output files
+            String published_path_str = "${dirname ? "$dirname/" : ""}$path.name"
+            if (dirname) {
+                // the BAM + VCF files are published in per-sample sub-directories
+                if (path.name.endsWith(".bam") || path.name.endsWith(".vcf.gz")) {
+                    published_path_str
+                }
+            } else {
+                // the ref file and index are in the top-level output directory
+                if (path.name.endsWith(".fasta") || path.name.endsWith(".fasta.fai")) {
+                    published_path_str
+                }
+            }
+        }
+        | collectFile(sort: true, newLine: true)
+
+        configure_igv(
+            igv_fnames,
+            Channel.of(null),
+            [displayMode: "SQUISHED", colorBy: "strand"],
+            Channel.of(null),
+        )
+
+        ch_to_publish = ch_to_publish
+        | mix(configure_igv.out | map { [it, null] } )
     emit:
         combined_results_to_publish = ch_to_publish
 }

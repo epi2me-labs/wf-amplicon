@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The depth plot in the report now uses consistent colours for individual samples across the different amplicons.
 
+### Added
+- IGV config json file to the outputs (in order to visualise the alignments and called variants).
+
 ## [v1.0.4]
 ### Fixed
 - The workflow failing when there were tab characters in the FASTA header lines of reference sequences.
