@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 ### Fixed
+- The `miniasm` process requesting too little memory in some cases.
 - Spurious out-of-memory errors for the SPOA process.
 - Variant calling mode with `--combine_results` failing with a single sample/barcode.
 
