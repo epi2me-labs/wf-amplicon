@@ -42,7 +42,9 @@ the draft asssembly. If none of the assembled contigs is longer than
 process miniasm {
     label = "wfamplicon"
     cpus params.threads
-    memory "8 GB"
+    memory "${[8, 15, 31][task.attempt - 1]} GB"
+    errorStrategy { task.exitStatus in [137, 140] ? "retry" : "terminate" }
+    maxRetries 2
     input: tuple val(meta), path("reads.fastq.gz")
     output: tuple val(meta), path("reads.fastq.gz"), path("asm.fasta"), env(STATUS)
     script:
@@ -53,9 +55,34 @@ process miniasm {
 
     # overlap reads and assemble draft consensus (note that `miniasm` outputs the
     # assembly in GFA format)
-    minimap2 -L -x ava-ont -t $mapping_threads reads.fastq.gz reads.fastq.gz \
-    | miniasm -s 100 -e 3 -f reads.fastq.gz - \
-    | awk '/^S/{print ">"\$2"\\n"\$3}' > asm.fasta  # extract header + seq from GFA
+    (
+        # run the bash pipe in a subshell without `-eo pipefail` so that we can read the
+        # `PIPESTATUS` array (otherwise we won't catch if minimap fails with 137 or 140;
+        # CW-3923, CW-3435)
+        set +eo pipefail
+
+        minimap2 -L -x ava-ont -t $mapping_threads reads.fastq.gz reads.fastq.gz \
+        | miniasm -s 100 -e 3 -f reads.fastq.gz - \
+        | awk '/^S/{print ">"\$2"\\n"\$3}' > asm.fasta  # extract header + seq from GFA
+
+        exit_codes=("\${PIPESTATUS[@]}")
+        echo "pipe exit codes: \${exit_codes[*]}"
+        # if `miniasm` fails with 137/140, it'll send SIGPIPE to `minimap`; we thus keep
+        # track of the memory exit codes separately from the other non-zero exit codes
+        memory_fail=0
+        other_fail=0
+        for exit_code in "\${exit_codes[@]}"; do
+            case \$exit_code in
+                0) : ;;
+                137 | 140) memory_fail=\$exit_code ;;
+                *) other_fail=\$exit_code ;;
+            esac
+        done
+        # make sure there were no non-zero exit codes (and fail the process with the
+        # respective exit code otherwise)
+        [[ memory_fail == 0 ]] || exit \$memory_fail
+        [[ other_fail == 0 ]] || exit \$other_fail
+    )
 
     if [[ -s asm.fasta ]]; then
         # check if at least one of the contigs is longer than the force-SPOA-threshold
