@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The depth plot in the report now uses consistent colours for individual samples across the different amplicons.
+- The workflow now uses the `fastcat` read length and quality histograms instead of the per-read stats in the report process.
 
 ### Added
 - IGV config json file to the outputs (in order to visualise the alignments and called variants).
