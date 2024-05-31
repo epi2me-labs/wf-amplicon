@@ -266,7 +266,11 @@ workflow pipeline {
 
         // add fastcat stats of raw reads to channel with results for report
         ch_results_for_report = ch_reads
-        | map { meta, reads, stats_dir -> [meta, *file(stats_dir.resolve("*"))] }
+        | map { meta, reads, stats_dir -> [
+            meta,
+            *file(stats_dir.resolve("*.hist")),
+            file(stats_dir.resolve("per-file-stats.tsv")),
+        ] }
 
         // either subset reads (i.e. drop the longest and then take the next longest) or
         // downsample naively or take all reads

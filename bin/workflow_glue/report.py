@@ -362,7 +362,7 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
     # summarize bamstats results of all samples for the following report sections
     bamstats_summary = util.summarize_bamstats(datasets)
 
-    # if in de-novo mode, only keep the sample amplicon combinations that had alignments
+    # only keep the sample amplicon combinations that had alignments
     bamstats_summary.query("reads > 0", inplace=True)
 
     # section for alignment stats (per sample and per-amplicon if variant calling mode;
@@ -579,14 +579,16 @@ def preprocessing_section(report, datasets):
         else 0,
     ]
     # now get the same stats for after filtering
-    fastcat_per_read_stats = pd.concat((d.fastcat_per_read_stats for d in datasets))
+    fastcat_comb_length_hists = pd.concat((d.fastcat_length_hist for d in datasets))
+    fastcat_comb_qual_hists = pd.concat((d.fastcat_qual_hist for d in datasets))
     preprocessing_stats.loc["Filtered"] = [
-        fastcat_per_read_stats.shape[0],
-        fastcat_per_read_stats["read_length"].sum(),
-        fastcat_per_read_stats["read_length"].min(),
-        fastcat_per_read_stats["read_length"].max(),
-        fastcat_per_read_stats["mean_quality"].mean(),
+        n_reads := fastcat_comb_length_hists['count'].sum(),
+        fastcat_comb_length_hists.eval('start * count').sum(),
+        fastcat_comb_length_hists['start'].min(),
+        fastcat_comb_length_hists['start'].max(),
+        fastcat_comb_qual_hists.eval('(start + end) / 2 * count').sum() / n_reads
     ]
+
     # and for after trimming
     post_trim_per_file_stats = pd.concat((d.post_trim_per_file_stats for d in datasets))
     preprocessing_stats.loc["Downsampled, trimmed"] = [
@@ -625,13 +627,9 @@ def preprocessing_section(report, datasets):
         )
         DataTable.from_pandas(preprocessing_stats)
 
-        # combine all post-filter per-read stats for the SeqSummary
-        comb_per_read_stats = pd.concat(
-            data.fastcat_per_read_stats for data in datasets
-        )
         # return early if there were no per-read stats (i.e. there were no reads left
         # after filtering)
-        if comb_per_read_stats.empty:
+        if preprocessing_stats.loc["Filtered", "Reads"] == 0:
             return
         # `SeqSummary` plots
         html_tags.p(
@@ -642,7 +640,11 @@ def preprocessing_section(report, datasets):
             individual samples).
             """
         )
-        fastcat.SeqSummary(comb_per_read_stats)
+        # give all histograms to the fastcat SeqSummary
+        fastcat.SeqSummary(
+            tuple(d.data_dir for d in datasets),
+            sample_names=tuple(d.sample_alias for d in datasets),
+        )
 
 
 def de_novo_qc_section(report, datasets):

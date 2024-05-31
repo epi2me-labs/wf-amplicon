@@ -1,5 +1,6 @@
 """Common functions and baseclass for holding report data."""
 import dominate.tags as html_tags
+from ezcharts.components.fastcat import load_histogram
 from ezcharts.layout.snippets import Progress
 import pandas as pd
 import pysam
@@ -21,11 +22,16 @@ class ReportDataSet:
         self.fastcat_per_file_stats = self.read_csv(
             data_dir / "per-file-stats.tsv", sep="\t"
         )
-        # read the fastcat per-read stats (these include all reads present after
+        # read the fastcat length histogram (this includes all reads present after
         # filtering and before downsampling or trimming)
-        self.fastcat_per_read_stats = self.read_csv(
-            data_dir / "per-read-stats.tsv.gz", sep="\t", index_col="read_id"
-        )
+        self.fastcat_length_hist = load_histogram(data_dir, "length")
+        if self.fastcat_length_hist.empty:
+            self.all_inputs_valid = False
+        # read the fastcat length histogram
+        self.fastcat_qual_hist = load_histogram(data_dir, "quality")
+        if self.fastcat_qual_hist.empty:
+            self.all_inputs_valid = False
+
         # read the post-trimming fastcat per-file stats
         self.post_trim_per_file_stats = self.read_csv(
             data_dir / "porechopped-per-file-stats.tsv", sep="\t"
