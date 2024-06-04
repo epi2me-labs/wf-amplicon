@@ -4,17 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v1.1.0]
 ### Fixed
 - The `miniasm` process requesting too little memory in some cases.
 - Spurious out-of-memory errors for the SPOA process.
 - Variant calling mode with `--combine_results` failing with a single sample/barcode.
 
 ### Changed
-- Only define different colours for the individual samples in the per-amplicon depth plots when necessary (i.e. when there is at least one amplicon depth plot that shows more than one sample).
-
-### Changed
-- The depth plot in the report now uses consistent colours for individual samples across the different amplicons.
+- When there is at least one amplicon depth plot that shows more than one sample, the depth plots now use consistent colours for individual samples across the different amplicons.
 - The workflow now uses the `fastcat` read length and quality histograms instead of the per-read stats in the report process.
 
 ### Added
