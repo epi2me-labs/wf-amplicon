@@ -1,5 +1,5 @@
 This [Nextflow](https://www.nextflow.io/) workflow provides a simple way to
-analyse Oxford Nanopore reads generated from amplicons.
+analyse Oxford Nanopore reads generated from haploid amplicons.
 
 The workflow requires raw reads in FASTQ format and can be run in two modes:
 * Variant calling mode: Trigger this mode by passing a reference FASTA file.
@@ -16,6 +16,7 @@ The workflow requires raw reads in FASTQ format and can be run in two modes:
   [Medaka](https://github.com/nanoporetech/medaka). Please note that only one
   amplicon per barcode is supported in de-novo consensus mode.
 
-> Note: This workflow is *not* intended for marker gene sequencing of mixtures / communities of different organisms (e.g. 16S sequencing).
-> In de-novo consensus mode it expects a single amplicon per barcode.
+> Note: The amplicons analysed with this workflow need to be haploid.
+> wf-amplicon is *not* intended for diploid (e.g. human) samples or marker gene sequencing of mixtures / communities comprised of different organisms (e.g. 16S sequencing).
+> In de-novo consensus mode the workflow expects a single amplicon per barcode.
 > When running in variant calling mode, multiple amplicons per barcode can be processed, but their sequences need to be sufficiently different from each other so that most reads only align to one of the provided references.
