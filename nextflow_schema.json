@@ -3,7 +3,7 @@
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
     "title": "epi2me-labs/wf-amplicon",
     "workflow_title": "Amplicon workflow",
-    "description": "Nextflow workflow for analysing Oxford Nanopore reads created by amplicon sequencing.",
+    "description": "Nextflow workflow for analysing Oxford Nanopore reads created from haploid amplicons.",
     "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-amplicon/wf-amplicon-demo.tar.gz",
     "aws_demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-amplicon/wf-amplicon-demo/aws.nextflow.config",
     "url": "https://github.com/epi2me-labs/wf-amplicon",
