@@ -3,7 +3,7 @@ include {
     bamstats;
     mosdepth;
     concatMosdepthResultFiles;
-    lookupMedakaModel
+    medakaConsensus;
 } from "./common"
 
 
@@ -62,21 +62,6 @@ process downsampleBAMforMedaka {
 
     samtools view input.bam -N downsampled.read_IDs -o downsampled.bam
     samtools index downsampled.bam
-    """
-}
-
-process medakaConsensus {
-    label "medaka"
-    cpus Math.min(params.threads, 2)
-    memory "8 GB"
-    input:
-        tuple val(meta), path("input.bam"), path("input.bam.bai"), val(reg)
-        val medaka_model
-    output: tuple val(meta), path("consensus_probs.hdf")
-    script:
-    """
-    medaka consensus input.bam consensus_probs.hdf \
-        --threads $task.cpus --regions "$reg" --model $medaka_model
     """
 }
 
@@ -168,19 +153,6 @@ workflow pipeline {
         ch_reads
         ref
     main:
-        // get medaka model (look up or override)
-        def medaka_model
-        if (params.medaka_model) {
-            log.warn "Overriding Medaka model with ${params.medaka_model}."
-            medaka_model = params.medaka_model
-        } else {
-            Path lookup_table = file(
-                "${projectDir}/data/medaka_models.tsv", checkIfExists: true)
-            medaka_model = lookupMedakaModel(
-                lookup_table, params.basecaller_cfg, "medaka_variant"
-            )
-        }
-
         // some tools don't like `:` or `*` in FASTA header lines lines (e.g. medaka
         // will try to parse the sequence ID as region string if it contains `:`) and we
         // need to sanitize the ref IDs
@@ -260,7 +232,7 @@ workflow pipeline {
         ch_medaka_consensus_probs = medakaConsensus(
             // join with and transpose on the list of sanitized IDs for each sample
             downsampleBAMforMedaka.out | join(ch_sanitized_ids) | transpose(by: 3),
-            medaka_model
+            "variant",
         ) | groupTuple
 
         // get the variants

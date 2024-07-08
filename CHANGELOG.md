@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.1]
+### Changed
+- Updated Medaka to v1.12.0.
+
+### Removed
+- The `--medaka_model` parameter as the appropriate Medaka model is now automatically determined from the input data.
+- The now redundant `--basecaller_cfg` parameter as its value is now automatically detected from the input data on a per-sample basis.
+
+### Added
+- `--override_basecaller_cfg` parameter for cases where automatic selection fails or users wishes to override the automatic choice.
+
+
 ## [v1.1.0]
 ### Fixed
 - The `miniasm` process requesting too little memory in some cases.
