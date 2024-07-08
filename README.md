@@ -179,8 +179,6 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
 | min_coverage | integer | Minimum coverage for variants to keep. | Only variants covered by more than this number of reads are reported in the resulting VCF file. | 20 |
-| basecaller_cfg | string | Name of the basecaller model that processed the signal data; used to select an appropriate Medaka model. | The basecaller configuration is used to automatically select the appropriate Medaka model. The automatic selection can be overridden with the 'medaka_model' parameters. Available models are: 'dna_r10.4.1_e8.2_400bps_hac@v3.5.2', 'dna_r10.4.1_e8.2_400bps_sup@v3.5.2', 'dna_r9.4.1_e8_fast@v3.4', 'dna_r9.4.1_e8_hac@v3.3', 'dna_r9.4.1_e8_sup@v3.3', 'dna_r10.4.1_e8.2_400bps_hac_prom', 'dna_r9.4.1_450bps_hac_prom', 'dna_r10.3_450bps_hac', 'dna_r10.3_450bps_hac_prom', 'dna_r10.4.1_e8.2_260bps_hac', 'dna_r10.4.1_e8.2_260bps_hac_prom', 'dna_r10.4.1_e8.2_400bps_hac', 'dna_r9.4.1_450bps_hac', 'dna_r9.4.1_e8.1_hac', 'dna_r9.4.1_e8.1_hac_prom'. | dna_r10.4.1_e8.2_400bps_sup@v4.2.0 |
-| medaka_model | string | The name of the Medaka model to use. This will override the model automatically chosen based on the provided basecaller configuration. | The workflow will attempt to map the basecaller model (provided with 'basecaller_cfg') used to a suitable Medaka model. You can override this by providing a model with this option instead. |  |
 
 
 ### De-novo Consensus Options
@@ -207,6 +205,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 |--------------------------|------|-------------|------|---------|
 | number_depth_windows | integer | Number of windows used during depth of coverage calculations. | Depth of coverage is calculated for each sample across each amplicon split into this number of windows. A higher number will produce more fine-grained plots at the expense of run time. | 100 |
 | medaka_target_depth_per_strand | integer | Downsample each amplicon to this per-strand depth before running Medaka. | Medaka performs best with even strand coverage and depths between 80X and 400X. To avoid too high coverage, the workflow downsamples the reads for each amplicon to this per-strand depth before running Medaka. Changing this value is discouraged as it might cause decreased performance. | 150 |
+| override_basecaller_cfg | string | Override auto-detected basecaller model that processed the signal data; used to select an appropriate Medaka model. | Per default, the workflow tries to determine the basecall model from the input data. This parameter can be used to override the detected value (or to provide a model name if none was found in the inputs). However, users should only do this if they know for certain which model was used as selecting the wrong option might give sub-optimal results. A list of recent models can be found here: https://github.com/nanoporetech/dorado#DNA-models. |  |
 
 
 ### Miscellaneous Options
@@ -299,9 +298,9 @@ After alignment, haploid variants are called with [Medaka](https://github.com/na
 You can set the minimum coverage a variant needs to exceed in order to be included in the results with `--min_coverage`.
 Variants with lower coverage will still be listed in the resulting VCF files, but with `LOW_DEPTH` instead of `PASS` in the `FILTER` column.
 
-The workflow selects the appropriate [Medaka models](https://github.com/nanoporetech/medaka#models) based on the basecaller configuration that was used to process the signal data.
-You can use the parameter `--basecaller_cfg` to provide this information (e.g. `dna_r10.4.1_e8.2_400bps_hac`).
-Alternatively, you can choose the [Medaka](https://github.com/nanoporetech/medaka) model directly with `--medaka_model`.
+The workflow automatically selects the appropriate [Medaka model](https://github.com/nanoporetech/medaka#models) based on the basecall model that was used to process the signal data.
+In most cases, the workflow should be able to determine the basecall model from the input data.
+If this is not possible, it can be provided with the `--override_basecaller_cfg` parameter.
 
 #### 4. Use the variants to generate a consensus
 

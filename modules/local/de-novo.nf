@@ -1,9 +1,9 @@
 include {
-    lookupMedakaModel;
     alignReads as alignDraft;
     alignReads as alignPolished;
     bamstats as bamstatsDraft;
     bamstats as bamstatsPolished;
+    medakaConsensus;
 } from "./common"
 
 
@@ -126,19 +126,14 @@ process racon {
 Polish draft consensus with `medaka`. Also, emit the polished sequences as FASTQ
 (with consensus quality scores calculated by medaka) and not FASTA.
 */
-process medakaConsensus {
+process medakaStitch {
     label "medaka"
     cpus Math.min(params.threads, 3)
     memory "8 GB"
-    input:
-        tuple val(meta), path("input.bam"), path("input.bam.bai"), path("draft.fasta")
-        val medaka_model
+    input: tuple val(meta), path("consensus_probs.hdf"), path("draft.fasta")
     output: tuple val(meta), path("consensus.fastq")
     script:
     """
-    medaka consensus input.bam consensus_probs.hdf \
-        --threads $task.cpus --model $medaka_model
-
     medaka stitch consensus_probs.hdf draft.fasta consensus.fastq \
         --threads $task.cpus --qualities
     """
@@ -278,19 +273,6 @@ workflow pipeline {
         ch_reads
         method
     main:
-        // get medaka model (look up or override)
-        def medaka_model
-        if (params.medaka_model) {
-            log.warn "Overriding Medaka model with ${params.medaka_model}."
-            medaka_model = params.medaka_model
-        } else {
-            Path lookup_table = file(
-                "${projectDir}/data/medaka_models.tsv", checkIfExists: true)
-            medaka_model = lookupMedakaModel(
-                lookup_table, params.basecaller_cfg, "medaka_consensus"
-            )
-        }
-
         if (method !in ["miniasm", "spoa"]) {
             error "Invalid de novo method '$method' (needs to be either 'miniasm' " +
                 "or 'spoa')."
@@ -323,11 +305,11 @@ workflow pipeline {
 
         // polish with medaka
         medakaConsensus(
-            alignDraft.out
-            | join(ch_draft)
-            | map { meta, bam, bai, reads, cons -> [meta, bam, bai, cons] },
-            medaka_model
+            alignDraft.out | map { meta, bam, bai -> [meta, bam, bai, null] },
+            "consensus",
         )
+        | join(ch_draft | map { meta, reads, asm -> [meta, asm] })
+        | medakaStitch
 
         // get mapping stats and mosdepth per-base results for trimming the consensus
         bamstatsDraft(alignDraft.out)
@@ -335,7 +317,7 @@ workflow pipeline {
 
         // select and trim the consensus sequence with the largest mean coverage
         trimAndQC(
-            medakaConsensus.out
+            medakaStitch.out
             | join(
                 bamstatsDraft.out | map { meta, bamstats, flagstat -> [meta, flagstat] }
             )

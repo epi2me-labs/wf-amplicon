@@ -53,9 +53,9 @@ After alignment, haploid variants are called with [Medaka](https://github.com/na
 You can set the minimum coverage a variant needs to exceed in order to be included in the results with `--min_coverage`.
 Variants with lower coverage will still be listed in the resulting VCF files, but with `LOW_DEPTH` instead of `PASS` in the `FILTER` column.
 
-The workflow selects the appropriate [Medaka models](https://github.com/nanoporetech/medaka#models) based on the basecaller configuration that was used to process the signal data.
-You can use the parameter `--basecaller_cfg` to provide this information (e.g. `dna_r10.4.1_e8.2_400bps_hac`).
-Alternatively, you can choose the [Medaka](https://github.com/nanoporetech/medaka) model directly with `--medaka_model`.
+The workflow automatically selects the appropriate [Medaka model](https://github.com/nanoporetech/medaka#models) based on the basecall model that was used to process the signal data.
+In most cases, the workflow should be able to determine the basecall model from the input data.
+If this is not possible, it can be provided with the `--override_basecaller_cfg` parameter.
 
 #### 4. Use the variants to generate a consensus
 

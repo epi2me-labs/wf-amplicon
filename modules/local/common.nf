@@ -84,20 +84,29 @@ process concatMosdepthResultFiles {
     """
 }
 
-process lookupMedakaModel {
-    label "wfamplicon"
-    cpus 1
-    memory "2 GB"
+process medakaConsensus {
+    label "medaka"
+    cpus Math.min(params.threads, 2)
+    memory "8 GB"
     input:
-        path("lookup_table")
-        val basecall_model
-        val model_type
-    output:
-        stdout
-    shell:
-    '''
-    medaka_model=$(workflow-glue resolve_medaka_model \
-        lookup_table '!{basecall_model}' !{model_type})
-    echo -n $medaka_model
-    '''
+        tuple val(meta), path("input.bam"), path("input.bam.bai"), val(region)
+        val type
+    output: tuple val(meta), path("consensus_probs.hdf")
+    script:
+    // run on a particular region if specified
+    String region_arg = region ? "--regions '$region'" : ""
+    // we use `params.override_basecaller_cfg` if present; otherwise use
+    // `meta.basecall_models[0]` (there should only be one value in the list because
+    // we're running ingress with `allow_multiple_basecall_models: false`; note that
+    // `[0]` on an empty list returns `null`)
+    String basecall_model = params.override_basecaller_cfg ?: meta.basecall_models[0]
+    if (!basecall_model) {
+        error "Found no basecall model information in the input data for " + \
+            "sample '$meta.alias'. Please provide it with the " + \
+            "`--override_basecaller_cfg` parameter."
+    }
+    """
+    medaka consensus input.bam consensus_probs.hdf \
+        --threads $task.cpus $region_arg --model $basecall_model:$type
+    """
 }

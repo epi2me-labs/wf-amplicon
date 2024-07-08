@@ -284,6 +284,12 @@ workflow pipeline {
         // there was an entry in a sample sheet but no corresponding barcode dir)
         ch_reads = ch_reads.filter { meta, reads, stats_dir -> reads }
 
+        // warn the user if overriding the basecall models found in the inputs
+        if (params.override_basecaller_cfg) {
+            log.warn \
+                "Overriding basecall model with '${params.override_basecaller_cfg}'."
+        }
+
         // add fastcat stats of raw reads to channel with results for report
         ch_results_for_report = ch_reads
         | map { meta, reads, stats_dir -> [
@@ -400,7 +406,7 @@ workflow pipeline {
                 // true` does not work as expected if one channel contains only the key
                 // (as is the case with the `metas_failed` channel here)
                 | combine(ch_reads, by: 0),
-                "spoa"
+                "spoa",
             )
 
             // combine the results for `miniasm` and `spoa`
@@ -524,7 +530,9 @@ workflow {
         "analyse_unclassified":params.analyse_unclassified,
         "stats": true,
         "per_read_stats": true,
-        "fastcat_extra_args": fastcat_extra_args.join(" ")])
+        "fastcat_extra_args": fastcat_extra_args.join(" "),
+        "allow_multiple_basecall_models": false,
+    ])
 
     // run workflow
     pipeline(samples)
