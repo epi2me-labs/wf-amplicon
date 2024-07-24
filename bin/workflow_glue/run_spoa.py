@@ -32,7 +32,7 @@ def get_seqs_from_fastx_and_check_lengths(file, logger, max_len=None):
                     f"{max_len}. This is what assemblers are for. "
                     "Aborting..."
                 )
-                sys.exit()
+                sys.exit(0)
             yield seq
 
 
@@ -95,7 +95,13 @@ def main(args):
     seqs = get_seqs_from_fastx_and_check_lengths(
         args.fastq, logger, args.max_allowed_read_length
     )
-    first_seq = next(seqs)
+    try:
+        first_seq = next(seqs)
+    except StopIteration:
+        # looks like the input file was empty; this shouldn't happen, but we might as
+        # well catch it and exit gracefully
+        logger.error(f"Input file '{args.fastq}' appears to be empty. Aborting...")
+        sys.exit(0)
     for seq in seqs:
         rc = reverse_complement(seq)
         fwd_score = align(seq, first_seq).score
@@ -105,9 +111,15 @@ def main(args):
         else:
             rev.append(rc)
 
-    # uniformly interleave the reads
-    interleaved_reads = interleave_lists(fwd, rev)
-    logger.info("Finished interleaving reads.")
+    # uniformly interleave the reads (as long as we got fwd and rev reads)
+    if fwd and rev:
+        interleaved_reads = interleave_lists(fwd, rev)
+        logger.info("Finished interleaving reads.")
+    else:
+        # we know that we got either fwd or rev reads as otherwise the file must have
+        # been empty (which we checked above)
+        logger.info("Only got reads from one strand; not interleaving...")
+        interleaved_reads = fwd or rev
 
     # determine minimum coverage if param was provided
     min_cov = None

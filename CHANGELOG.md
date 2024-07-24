@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.2]
+### Fixed
+- The workflow failing in _de novo_ mode when all reads for a sample came from the same strand.
+
 ## [v1.1.1]
 ### Changed
 - Updated Medaka to v1.12.0.
@@ -13,8 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The now redundant `--basecaller_cfg` parameter as its value is now automatically detected from the input data on a per-sample basis.
 
 ### Added
-- `--override_basecaller_cfg` parameter for cases where automatic selection fails or users wishes to override the automatic choice.
-
+- `--override_basecaller_cfg` parameter for cases where automatic selection fails or users wish to override the automatic choice.
 
 ## [v1.1.0]
 ### Fixed
