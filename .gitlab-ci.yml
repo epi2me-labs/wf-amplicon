@@ -33,6 +33,7 @@ docker-run:
             "ref-filter-all",
             "de-novo",
             "de-novo-spoa-max-len-2000",  # CW-3864
+            "de-novo-filter-all",  # CW-4520
             "ref-no-reads",
             "ref-single-read",
             "de-novo-no-reads",
@@ -115,7 +116,6 @@ docker-run:
         AFTER_NEXTFLOW_CMD: |
           ls -p $$CI_PROJECT_NAME | grep -q barcode01/ &&
           ls -p $$CI_PROJECT_NAME | grep -q barcode02/
-
     - if: $MATRIX_NAME == "de-novo-spoa-max-len-2000"
       variables:
         # we run with a higher `--force_spoa_length_threshold` so that the SPOA
@@ -136,6 +136,21 @@ docker-run:
         AFTER_NEXTFLOW_CMD: |
           ls -p $$CI_PROJECT_NAME | grep -q barcode01/ &&
           ls -p $$CI_PROJECT_NAME | grep -vq barcode02/
+    - if: $MATRIX_NAME == "de-novo-filter-all"
+      # this tests that no de-novo QC section was added to the report when there
+      # were no reads left after filtering
+      variables:
+        NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
+          --fastq test_data/fastq-denovo
+          --max_read_length 1
+          --combine_results
+        NF_PROCESS_FILES: >
+          main.nf
+          lib/common.nf
+          modules/local/de-novo.nf
+        NF_IGNORE_PROCESSES: catFastqIntoFasta,concatTSVs,configure_igv,downsampleReads,medakaStitch,miniasm,mosdepthPerBase,mosdepthWindows,racon,spoa,trimAndQC
+        AFTER_NEXTFLOW_CMD: "! grep 'Quality Control' $$PWD/$$CI_PROJECT_NAME/*html"
 
     - if: $MATRIX_NAME == "ref-no-reads"
       variables:
