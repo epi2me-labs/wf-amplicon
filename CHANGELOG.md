@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The workflow failing in _de novo_ mode when all reads for a sample came from the same strand.
 
+### Changed
+- The report now skips read length histograms etc. if there were no reads left after filtering.
+
 ## [v1.1.1]
 ### Changed
 - Updated Medaka to v1.12.0.

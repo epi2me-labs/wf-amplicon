@@ -169,7 +169,7 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
         # omit all other sections
         preprocessing_section(report, bad_datasets)
 
-        if de_novo:
+        if de_novo and bad_datasets_failed_qc:
             de_novo_qc_section(report, bad_datasets_failed_qc)
 
         return
@@ -617,6 +617,9 @@ def preprocessing_section(report, datasets):
     ]
     # there could be NaNs in case some datasets didn't have any reads
     preprocessing_stats.fillna(0, inplace=True)
+    # check if there were no reads at all after filtering + trimming (in which case
+    # we'll skip the `SeqSummary` plots)
+    no_reads_in_data = preprocessing_stats.loc["Filtered", "reads"] == 0
     # some formatting
     for col in ("reads", "bases"):
         preprocessing_stats[col] = (
@@ -642,9 +645,8 @@ def preprocessing_section(report, datasets):
         )
         DataTable.from_pandas(preprocessing_stats)
 
-        # return early if there were no per-read stats (i.e. there were no reads left
-        # after filtering)
-        if preprocessing_stats.loc["Filtered", "Reads"] == 0:
+        # return early if there were no reads left after filtering
+        if no_reads_in_data:
             return
         # `SeqSummary` plots
         html_tags.p(
