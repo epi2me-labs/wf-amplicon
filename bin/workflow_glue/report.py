@@ -75,7 +75,7 @@ def argparser():
 
 def main(args):
     """Run the entry point."""
-    logger = get_named_logger("Report")
+    logger = get_named_logger("report")
 
     # in case there was a sample sheet, read it so that we can show the metadata in the
     # per-sample summary table
@@ -502,12 +502,9 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
                         palette=palette,
                     )
                     plt.title = {"text": "Coverage along amplicon"}
-                    plt.xAxis.max = depth_df["pos"].max()
-                    plt.xAxis.name = "Position along amplicon"
-                    plt.yAxis.name = "Sequencing depth"
-                    for s in plt.series:
-                        # only show the line and no circles
-                        s.showSymbol = False
+                    plt._fig.x_range.end = depth_df["pos"].max()
+                    plt._fig.xaxis.axis_label = "Position along amplicon"
+                    plt._fig.yaxis.axis_label = "Sequencing depth"
                     EZChart(plt, "epi2melabs")
 
     # add variant tables (skip if there were no VCFs)
