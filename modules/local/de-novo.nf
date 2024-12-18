@@ -61,7 +61,7 @@ process miniasm {
         # CW-3923, CW-3435)
         set +eo pipefail
 
-        minimap2 -L -x ava-ont -t $mapping_threads reads.fastq.gz reads.fastq.gz \
+        minimap2 -L -x ava-ont -t $mapping_threads --cap-kalloc 100m --cap-sw-mem 50m reads.fastq.gz reads.fastq.gz \
         | miniasm -s 100 -e 3 -f reads.fastq.gz - \
         | awk '/^S/{print ">"\$2"\\n"\$3}' > asm.fasta  # extract header + seq from GFA
 
@@ -112,7 +112,7 @@ process racon {
     echo $meta.alias  # makes some debugging easier
 
     # align against draft
-    minimap2 -L -x ava-ont -t $mapping_threads draft.fasta reads.fastq.gz \
+    minimap2 -L -x ava-ont -t $mapping_threads --cap-kalloc 100m --cap-sw-mem 50m draft.fasta reads.fastq.gz \
     | bgzip > pre-racon.paf.gz
 
     # run racon
