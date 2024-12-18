@@ -6,7 +6,7 @@ process alignReads {
     output: tuple val(meta), path("*.bam"), path("*.bai")
     script:
     """
-    minimap2 -t $task.cpus -ax map-ont reference.fasta reads.fastq.gz \
+    minimap2 -t $task.cpus -ax map-ont --cap-kalloc 100m --cap-sw-mem 50m reference.fasta reads.fastq.gz \
         -R '@RG\\tID:$meta.alias\\tSM:$meta.alias' \
     | samtools sort -@ $task.cpus -o "${meta.alias}.aligned.sorted.bam" -
 

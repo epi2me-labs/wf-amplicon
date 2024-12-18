@@ -4,7 +4,7 @@ import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
 include { fastq_ingress } from "./lib/ingress"
-include { configure_igv } from "./lib/common"
+include { configure_igv; getParams } from "./lib/common"
 include { pipeline as variantCallingPipeline } from "./modules/local/variant-calling"
 include {
     pipeline as deNovoPipeline_asm; pipeline as deNovoPipeline_spoa;
@@ -54,20 +54,6 @@ process addMedakaToVersionsFile {
     """
 }
 
-process getParams {
-    label "wfamplicon"
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "params.json"
-    cpus 1
-    memory "2 GB"
-    output:
-        path "params.json"
-    script:
-    String paramsJSON = new JsonBuilder(params).toPrettyString()
-    """
-    # Output nextflow params object to JSON
-    echo '$paramsJSON' > params.json
-    """
-}
 
 process downsampleReads {
     label "wfamplicon"
