@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - Reconcile template with v5.3.3
+- Minor decrease to some memory directives to avoid “Process requirement exceeds available memory” errors when running in WSL.
 ### Added
 - Use optimised minimap2 arguments
 
