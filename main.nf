@@ -122,7 +122,7 @@ process porechop {
         // the `.fastq.gz` file (depending on compression ratio); we give another factor
         // of 2 for extra margin to be on the safe side
         def fastq_size = fastq.size()
-        fastq_size > 2e9 ? "32 GB" : (fastq_size > 2.5e8 ? "16 GB" : "2 GB")
+        fastq_size > 2e9 ? "31 GB" : (fastq_size > 2.5e8 ? "16 GB" : "2 GB")
     }
     input: tuple val(meta), path(fastq, stageAs: "reads.fastq.gz")
     output:
