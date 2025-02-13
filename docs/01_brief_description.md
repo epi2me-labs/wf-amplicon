@@ -1,1 +1,1 @@
-Nextflow workflow for analysing Oxford Nanopore reads created from haploid amplicons.
+Analyse haploid amplicon nanopore sequencing data.
