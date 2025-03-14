@@ -500,6 +500,7 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
                         y="depth",
                         hue="sample",
                         palette=palette,
+                        marker=False,
                     )
                     plt.title = {"text": "Coverage along amplicon"}
                     plt._fig.x_range.end = depth_df["pos"].max()

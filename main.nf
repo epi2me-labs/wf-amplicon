@@ -174,7 +174,7 @@ process concatTSVs {
 }
 
 process makeReport {
-    label "wfamplicon"
+    label "wf_common"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "wf-amplicon-report.html"
     cpus 1
     memory "8 GB"
