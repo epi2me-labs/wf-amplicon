@@ -1,4 +1,4 @@
-# Amplicon workflow
+# Amplicon
 
 Analyse haploid amplicon nanopore sequencing data.
 
