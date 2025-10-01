@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v1.2.0]
 ### Changed
 - Minor decrease to some memory directives to avoid “Process requirement exceeds available memory” errors when running in WSL.
 - Updated Medaka to v2.1.1 bringing compatibility with v5.2.0 basecalling models.
