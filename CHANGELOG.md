@@ -6,8 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
-- Reconcile template with v5.5.0
 - Minor decrease to some memory directives to avoid “Process requirement exceeds available memory” errors when running in WSL.
+- Updated Medaka to v2.1.1 bringing compatibility with v5.2.0 basecalling models.
+- Updated to wf-template v5.6.2, changing:
+    - Reduce verbosity of debug logging from fastcat which can occasionally occlude errors found in FASTQ files during ingress.
+    - Log banner art to say "EPI2ME" instead of "EPI2ME Labs" to match current branding. This has no effect on the workflow outputs.
+    - pre-commit configuration to resolve an internal dependency problem with flake8. This has no effect on the workflow.
 ### Added
 - Use optimised minimap2 arguments
 
@@ -70,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v1.0.2]
 ### Fixed
-- Incorrect CPU use specification for the `medakaVariant` process.
+- Incorrect CPU use specification for the `medakaVCF` process.
 
 ## [v1.0.1]
 ### Changed

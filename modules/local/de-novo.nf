@@ -3,7 +3,7 @@ include {
     alignReads as alignPolished;
     bamstats as bamstatsDraft;
     bamstats as bamstatsPolished;
-    medakaConsensus;
+    medakaInference;
 } from "./common"
 
 
@@ -134,7 +134,7 @@ process medakaStitch {
     output: tuple val(meta), path("consensus.fastq")
     script:
     """
-    medaka stitch consensus_probs.hdf draft.fasta consensus.fastq \
+    medaka sequence consensus_probs.hdf draft.fasta consensus.fastq \
         --threads $task.cpus --qualities
     """
 }
@@ -304,7 +304,7 @@ workflow pipeline {
         alignDraft(ch_draft)
 
         // polish with medaka
-        medakaConsensus(
+        medakaInference(
             alignDraft.out | map { meta, bam, bai -> [meta, bam, bai, null] },
             "consensus",
         )

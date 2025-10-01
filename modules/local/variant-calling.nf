@@ -3,7 +3,7 @@ include {
     bamstats;
     mosdepth;
     concatMosdepthResultFiles;
-    medakaConsensus;
+    medakaInference;
 } from "./common"
 
 
@@ -65,7 +65,7 @@ process downsampleBAMforMedaka {
     """
 }
 
-process medakaVariant {
+process medakaVCF {
     label "medaka"
     cpus 2
     memory "8 GB"
@@ -86,7 +86,7 @@ process medakaVariant {
         tuple val(meta), path("medaka.consensus.fasta"), emit: consensus
     script:
     """
-    medaka variant reference.fasta consensus_probs*.hdf medaka.vcf
+    medaka vcf consensus_probs*.hdf reference.fasta medaka.vcf
     medaka tools annotate --dpsp medaka.vcf reference.fasta input.bam \
         medaka.annotated.unfiltered.vcf
 
@@ -229,14 +229,14 @@ workflow pipeline {
 
         // run medaka consensus (the process will run once for each sample--amplicon
         // combination)
-        ch_medaka_consensus_probs = medakaConsensus(
+        ch_medaka_consensus_probs = medakaInference(
             // join with and transpose on the list of sanitized IDs for each sample
             downsampleBAMforMedaka.out | join(ch_sanitized_ids) | transpose(by: 3),
             "variant",
         ) | groupTuple
 
         // get the variants
-        medakaVariant(
+        medakaVCF(
             ch_medaka_consensus_probs
             | join(downsampleBAMforMedaka.out)
             | join(ch_sanitized_refs),
@@ -258,7 +258,7 @@ workflow pipeline {
         combined_bams = null
         if (params.combine_results) {
             combined_vcfs = mergeVCFs(
-                medakaVariant.out.filtered.collect { meta, vcf, idx -> vcf }
+                medakaVCF.out.filtered.collect { meta, vcf, idx -> vcf }
             )
             combined_bams = mergeBAMs(
                 alignReads.out.collect { meta, bam, bai -> bam },
@@ -271,8 +271,8 @@ workflow pipeline {
         mapped = alignReads.out
         mapping_stats = bamstats.out
         depth = concatMosdepthResultFiles.out
-        variants = medakaVariant.out.filtered
-        consensus = medakaVariant.out.consensus
+        variants = medakaVCF.out.filtered
+        consensus = medakaVCF.out.consensus
         combined_vcfs
         combined_bams
 }
