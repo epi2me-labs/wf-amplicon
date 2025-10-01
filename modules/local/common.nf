@@ -84,7 +84,7 @@ process concatMosdepthResultFiles {
     """
 }
 
-process medakaConsensus {
+process medakaInference {
     label "medaka"
     cpus Math.min(params.threads, 2)
     memory "8 GB"
@@ -106,7 +106,7 @@ process medakaConsensus {
             "`--override_basecaller_cfg` parameter."
     }
     """
-    medaka consensus input.bam consensus_probs.hdf \
+    medaka inference input.bam consensus_probs.hdf \
         --threads $task.cpus $region_arg --model $basecall_model:$type
     """
 }

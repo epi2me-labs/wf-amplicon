@@ -483,11 +483,14 @@ workflow pipeline {
             }
             | collectFile(sort: true, newLine: true)
 
+            boolean keep_track_order = false
+            
             configure_igv(
                 igv_fnames,
                 Channel.of(null),
                 [displayMode: "SQUISHED", colorBy: "strand"],
                 Channel.of(null),
+                keep_track_order
             )
         }
 

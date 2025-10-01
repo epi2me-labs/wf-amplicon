@@ -98,7 +98,7 @@ docker-run:
           main.nf
           lib/common.nf
           modules/local/variant-calling.nf
-        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,subsetReads,alignReads,bamstats,concatMosdepthResultFiles,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,mosdepth,subsetRefFile,concatTSVs,catFastqIntoFasta,configure_igv
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,subsetReads,alignReads,bamstats,concatMosdepthResultFiles,medakaInference,medakaVCF,mergeBAMs,mergeVCFs,mosdepth,subsetRefFile,concatTSVs,catFastqIntoFasta,configure_igv
         AFTER_NEXTFLOW_CMD: |
           grep 'No reads left after pre-processing' .nextflow.log &&
           grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
@@ -165,7 +165,7 @@ docker-run:
           main.nf
           lib/common.nf
           modules/local/variant-calling.nf
-        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,subsetReads,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,subsetRefFile,concatTSVs,catFastqIntoFasta,configure_igv
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,subsetReads,medakaInference,medakaVCF,mergeBAMs,mergeVCFs,subsetRefFile,concatTSVs,catFastqIntoFasta,configure_igv
         AFTER_NEXTFLOW_CMD: |
           grep 'No reads left after pre-processing' .nextflow.log &&
           grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
@@ -181,7 +181,7 @@ docker-run:
           main.nf
           lib/common.nf
           modules/local/variant-calling.nf
-        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,subsetReads,medakaConsensus,medakaVariant,mergeBAMs,mergeVCFs,subsetRefFile,concatTSVs,catFastqIntoFasta,configure_igv
+        NF_IGNORE_PROCESSES: downsampleBAMforMedaka,downsampleReads,subsetReads,medakaInference,medakaVCF,mergeBAMs,mergeVCFs,subsetRefFile,concatTSVs,catFastqIntoFasta,configure_igv
         AFTER_NEXTFLOW_CMD: grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
 
     - if: $MATRIX_NAME == "de-novo-no-reads"
@@ -195,7 +195,7 @@ docker-run:
           main.nf
           lib/common.nf
           modules/local/de-novo.nf
-        NF_IGNORE_PROCESSES: downsampleReads,subsetReads,subsetRefFile,concatTSVs,medakaConsensus,medakaStitch,miniasm,mosdepthPerBase,mosdepthWindows,racon,spoa,trimAndQC,catFastqIntoFasta,configure_igv,publish
+        NF_IGNORE_PROCESSES: downsampleReads,subsetReads,subsetRefFile,concatTSVs,medakaInference,medakaStitch,miniasm,mosdepthPerBase,mosdepthWindows,racon,spoa,trimAndQC,catFastqIntoFasta,configure_igv,publish
         AFTER_NEXTFLOW_CMD: |
           grep 'No reads left after pre-processing' .nextflow.log &&
           grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html
@@ -210,7 +210,7 @@ docker-run:
           main.nf
           lib/common.nf
           modules/local/de-novo.nf
-        NF_IGNORE_PROCESSES: downsampleReads,subsetReads,subsetRefFile,concatTSVs,medakaConsensus,medakaStitch,miniasm,mosdepthPerBase,mosdepthWindows,racon,spoa,trimAndQC,catFastqIntoFasta,configure_igv,publish
+        NF_IGNORE_PROCESSES: downsampleReads,subsetReads,subsetRefFile,concatTSVs,medakaInference,medakaStitch,miniasm,mosdepthPerBase,mosdepthWindows,racon,spoa,trimAndQC,catFastqIntoFasta,configure_igv,publish
         AFTER_NEXTFLOW_CMD: "grep 'only a limited report is available' $$PWD/$$CI_PROJECT_NAME/*html"
 
     - if: $MATRIX_NAME == "ref-mergeVCFs-single-barcode"
