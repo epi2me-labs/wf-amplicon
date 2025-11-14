@@ -29,6 +29,7 @@ docker-run:
           [
             "ref",
             "ref-sample_sheet",
+            "ref-sample_sheet-numeric-alias",
             "ref-with-spaces",
             "ref-filter-all",
             "de-novo",
@@ -65,6 +66,21 @@ docker-run:
           --fastq test_data/fastq
           --reference test_data/reference.fasta
           --sample_sheet test_data/sample_sheet.csv
+          --threads 2
+          --combine_results
+          --igv
+        NF_PROCESS_FILES: >
+          main.nf
+          lib/common.nf
+          modules/local/variant-calling.nf
+        NF_IGNORE_PROCESSES: downsampleReads,concatTSVs,catFastqIntoFasta
+    - if: $MATRIX_NAME == "ref-sample_sheet-numeric-alias"
+      variables:
+        NF_WORKFLOW_OPTS: >
+          -executor.\$$local.memory 16GB
+          --fastq test_data/fastq
+          --reference test_data/reference.fasta
+          --sample_sheet test_data/sample_sheet_numeric.csv
           --threads 2
           --combine_results
           --igv

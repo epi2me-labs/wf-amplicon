@@ -81,7 +81,10 @@ def main(args):
     # per-sample summary table
     metadata = None
     if args.sample_sheet:
-        metadata = pd.read_csv(args.sample_sheet, index_col="alias")
+        metadata = pd.read_csv(
+            args.sample_sheet,
+            index_col="alias",
+            dtype={'alias': str, 'ref': str, 'barcode': str, 'type': str})
 
     # read data for report
     datasets = sorted(
@@ -325,6 +328,8 @@ def populate_report(report, metadata, all_datasets, ref_fasta, downsampling_size
                             n_exp_amps = len(
                                 metadata.loc[d.sample_alias, "ref"].split()
                             )
+                        # metadata can be None throwing an AttributeError
+                        # TODO: check if metadata is none explicitely
                         except (AttributeError, KeyError):
                             n_exp_amps = len(ref_seqs)
                         n_amplicons_stats_str = (
