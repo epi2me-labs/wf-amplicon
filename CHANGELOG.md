@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - `Analysis incomplete` warning message in the report, which resulted from incorrect handling of numeric aliases in the sample sheet.
+### Changed
+- Updated to wf-template v5.6.3 to maintain compliance with our latest wf-template standard, changing:
+  - Pipeline overview now appears before pipeline parameters in README.
+  - ezCharts plotting library has been updated to 0.15.1, there are no user facing changes to plots.
+  - Fastcat FASTQ pre-processing program has been updated to 0.24.2, it is more robust to malformed FASTQ input.
 
 ## [v1.2.0]
 ### Changed
