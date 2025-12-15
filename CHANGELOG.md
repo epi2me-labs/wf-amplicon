@@ -4,14 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v1.2.1]
 ### Fixed
 - `Analysis incomplete` warning message in the report, which resulted from incorrect handling of numeric aliases in the sample sheet.
 ### Changed
-- Updated to wf-template v5.6.3 to maintain compliance with our latest wf-template standard, changing:
+- Updated to wf-template v5.7.0 to maintain compliance with our latest wf-template standard, changing:
   - Pipeline overview now appears before pipeline parameters in README.
   - ezCharts plotting library has been updated to 0.15.1, there are no user facing changes to plots.
   - Fastcat FASTQ pre-processing program has been updated to 0.24.2, it is more robust to malformed FASTQ input.
+  - CHANGELOG to be compliant with our formatting rules.
+- Updated to Medaka v2.2.0 to:
+    - Improve multithreading performance.
+    - Support data from more recent basecalling models. 
+
 
 ## [v1.2.0]
 ### Changed
@@ -205,5 +210,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bug in documentation that prevented blog post from building.
 
 ## [v0.1.0]
-* First release.
+First release.
 
