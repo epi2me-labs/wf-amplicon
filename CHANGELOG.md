@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.2.2]
+### Fixed
+- medaka annotate would occasionally fail due to its input not being sorted by coordinate. This is fixed by explicitely sorting prior to the annotation step.
+### Changed
+- Updated to wf-template v5.7.1 to maintain compliance with our latest wf-template standard, changing:
+    - The README docs sections to move related protocols after inputs and outputs.
+    - Links in the README to point at our new documentation website.
+    - Our pre-commit configuration to resolve a dependency issue in our test infrastructure.
+
+
 ## [v1.2.1]
 ### Fixed
 - `Analysis incomplete` warning message in the report, which resulted from incorrect handling of numeric aliases in the sample sheet.

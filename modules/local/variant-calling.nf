@@ -87,7 +87,8 @@ process medakaVCF {
     script:
     """
     medaka vcf consensus_probs*.hdf reference.fasta medaka.vcf
-    medaka tools annotate --dpsp medaka.vcf reference.fasta input.bam \
+    bcftools sort medaka.vcf -o medaka.sorted.vcf
+    medaka tools annotate --dpsp medaka.sorted.vcf reference.fasta input.bam \
         medaka.annotated.unfiltered.vcf
 
     # use the sample alias as sample name in the VCF and filter variants
